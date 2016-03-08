@@ -23,6 +23,7 @@ function preprocessData(pathDir, texture1, count, index) {
         if (!name){
             texture.needsUpdate = true;
             isLoaded[index] = true;
+            animate();
         }
         else {
             var img = new Image;
