@@ -1,0 +1,804 @@
+﻿<!DOCTYPE html> 
+<html lang="en">
+	<head>
+		<title>three.js webgl - cameras</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    </head>
+    <body>
+
+        <!--<img src="lut/myLut3.png" alt="Smiley face" height="256" width="256">-->
+        <div style="text-align: center; display:block;">
+            <select style="display:table-cell;
+                vertical-align:middle; margin:auto;" id="DateSetSelect" onchange="setDataset(this.value)">
+                <option value="2">Hlava</option>
+                <option value="1">Ladviny</option>
+                <option value="3">Torso</option>
+                <!--<option value="4">Light hard tissue</option>-->
+            </select>
+            <select style="display:table-cell;
+                vertical-align:middle; margin:auto;" id="LutSelect" onchange="setLUT(this.value)">
+                <option value="4">Light hard tissue</option>
+                <option value="1">Muscle</option>
+                <option value="2">Light muscle</option>
+                <option value="3">Hard tissue</option>
+            </select>
+            <select style="display:table-cell;
+                vertical-align:middle; margin:auto;" id="ShaderType" onchange="setShader()">
+                <option value="xray">X-Ray</option>
+                <option value="render">Render</option>
+                <option value="mip">MIP</option>
+                <option value="iso">Iso-surface</option>
+            </select>
+            <select style="display:table-cell;
+                vertical-align:middle; margin:auto;" id="QualitySelect" onchange="changeQuality(this.value)">
+                <option value="1">High</option>
+                <option value="2">Medium</option>
+                <option value="3">Low</option>
+            </select>
+            <input name="OpacityBar" type="range" id="sliderBar" min="0" max="100" step="1" value="50" onChange="setOpacity(this.value);" />
+        </div>
+        <div id="output"></div>
+        <canvas id="myCanvas" style="display: block; border:1px solid #d3d3d3; color: black;"></canvas> 
+        <script type="text/javascript">
+            var alphaMul = 0.004;
+
+            function setOpacity(opacity) {
+                alphaMul = opacity * 0.00008;
+                setShader();
+            }
+
+            function setShader() {
+                var e = document.getElementById("ShaderType");
+                var type = e.options[e.selectedIndex].value;
+
+                if (type == "render")
+                    volumeCube.material = returnMaterialVolumeLUT();
+                else if (type == "xray")
+                    volumeCube.material = returnMaterialVolumeXray();
+                else if (type == "mip")
+                    volumeCube.material = returnMaterialVolumeMip();
+                else if (type == "iso")
+                    volumeCube.material = returnMaterialVolumeIso();
+                animate();
+            }
+
+            function setLUT(lutNo) {
+                if (lutNo == "1")
+                    lutTexture = loader.load("lut/myLut1.png");
+                else if (lutNo == "2")
+                    lutTexture = loader.load("lut/myLut2.png");
+                else if (lutNo == "3")
+                    lutTexture = loader.load("lut/myLut3.png");
+                else if (lutNo == "4")
+                    lutTexture = loader.load("lut/myLut4.png");
+                setShader();
+            }
+
+            function setDataset(dsNo) {
+                if (dsNo == "1") {
+                    volumeTexture = oblickyTexture;
+                    sizeInZ = 0.002;
+                }
+                else if (dsNo == "2") {
+                    volumeTexture = hlavaTexture;
+                    sizeInZ = 0.007;
+                }
+                else if (dsNo == "3") {
+                    volumeTexture = torsoTexture;
+                    sizeInZ = 0.003;
+                }
+                setShader();
+            }
+
+            function changeQuality(settNo) {
+                if(settNo == "1") {
+                    sizeOfTexture = 8192;
+                    sizeOfImage = 512;
+                    rayCastStep = 0.0005;
+                    sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
+                }
+                else if (settNo == "2") {
+                    sizeOfTexture = 4096;
+                    sizeOfImage = 256;
+                    rayCastStep = 0.0015;
+                    sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
+                }
+                else if (settNo == "3") {
+                    sizeOfTexture = 1024;
+                    sizeOfImage = 128;
+                    rayCastStep = 0.0025;
+                    sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
+                }
+                hlavaTexture = preprocessData("volumes/HEAD/", hlavaTexture, 83, 0);
+                oblickyTexture = preprocessData("volumes/SET1/", oblickyTexture, 361, 1);
+                torsoTexture = preprocessData("volumes/TORSO/", oblickyTexture, 394, 2);
+
+                var e = document.getElementById("DateSetSelect");
+                var type = e.options[e.selectedIndex].value;
+                setDataset(type)
+            }
+        </script>
+
+        <script src="./js/three.js"></script>
+        <script src="./js/OrbitControls.js"></script>
+        <script src="./js/TrackballControls.js"></script>
+        <script src="./DataProcessing.js"></script>
+
+        <!-- Shaders -->
+        <script type="x-shader/x-vertex" id="vertexshader">
+
+            // switch on high precision floats
+
+            void main()
+            {
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+            }
+
+        </script>
+
+        <script type="x-shader/x-fragment" id="xrayfshader">
+
+            uniform sampler2D frontFace;
+            uniform sampler2D backFace;
+            uniform sampler2D volume;
+
+            uniform vec2 size;
+            uniform float alphaMultiplier;
+            uniform float step;
+            uniform int cntInRow;
+            uniform float zSize;
+
+            vec2 mappingFce(vec3 position, int sideCnt){
+                float partSide = float(1) / float(sideCnt);
+
+                int imgCount = int(position.z * (float(1) / zSize));
+
+                int yMul = int(imgCount / sideCnt);
+                int xMul = int(imgCount - (yMul*sideCnt));
+
+                float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
+                float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
+                vec2 mappedPosition = vec2(xPos, yPos);
+
+                return mappedPosition;
+            }
+
+            void main()
+            {
+                vec4 value;
+                vec4 result = vec4(0.0);
+
+                vec4 fragCoord = vec4(gl_FragCoord.xy/size, 0.0, 0.0);
+                vec3 frontPos = texture2D(frontFace, fragCoord.xy).rgb;
+                vec3 backPos = texture2D(backFace, fragCoord.xy).rgb;
+                vec3 direction = normalize(backPos - frontPos);
+
+                vec3 actualPos = frontPos;
+
+                float alfa = 0.0;
+
+                if(length(direction) > 0.001)
+                {
+                    int steps = int(floor(length(direction)/step));
+                    vec3 diff1 = direction / float(steps);
+
+                    for (int i=0; i < 9999; i++) {
+                        value.rgb = texture2D(volume, mappingFce(actualPos.xyz, cntInRow)).rgb;
+                        value.a = ((0.2126*value.r + 0.7152*value.g + 0.0722*value.b)*alphaMultiplier);
+                        alfa += value.a;
+                        if(alfa >= 0.99)
+                        {
+                            alfa = 1.0;
+                            break;
+                        }
+
+                        actualPos += diff1;
+                        if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                            break;
+                    }
+                }
+
+                gl_FragColor=vec4(vec3(1.0,1.0,1.0)*alfa, 1.0);
+            }
+
+        </script>
+
+        <script type="x-shader/x-fragment" id="lutfshader">
+
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+
+            uniform sampler2D frontFace;
+            uniform sampler2D backFace;
+            uniform sampler2D volume;
+            uniform sampler2D transferFce;
+
+            uniform vec2 size;
+            uniform float alphaMultiplier;
+            uniform int cntInRow;
+            uniform float step;
+            uniform float zSize;
+
+            vec2 mappingFce(vec3 position, int sideCnt){
+                float partSide = float(1) / float(sideCnt);
+
+                int imgCount = int(position.z * (float(1) / zSize));
+
+                int yMul = int(imgCount / sideCnt);
+                int xMul = int(imgCount - (yMul*sideCnt));
+
+                float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
+                float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
+
+                return vec2(xPos, yPos);
+            }
+
+            void main()
+            {
+                vec4 value;
+                vec4 result = vec4(0.0);
+
+                vec2 fragCoord = gl_FragCoord.xy/size;
+                vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
+                vec3 backPos = texture2D(backFace, fragCoord).rgb;
+                vec3 direction = normalize(backPos - frontPos);
+                    
+                vec3 actualPos = frontPos;
+
+                if(length(direction) > 0.01)
+                {
+                    int steps = int(floor(length(direction)/step));
+                    vec3 diff1 = direction / float(steps);
+                    //float alfa = 0.0;
+
+                    for (int i=0; i < 20000; i++) {
+                        vec4 v = texture2D(volume, mappingFce(actualPos.xyz, cntInRow));
+            
+                        value = texture2D(transferFce, vec2(v.g, 0.5));
+                        if(value.a < 0.9)
+                            value.a *= alphaMultiplier*125.;
+                        //if((value.a) < 0.01) {
+                        //    value.rgb = vec3(0.0);
+                        //    value.a = 0.0; }
+                        result.rgb = (1.0 - result.a) * value.rgb * value.a + result.rgb;
+                        result.a = (1.0 - result.a) * value.a + result.a;
+                        //result.rgb = (1.0 - value.a) * result.rgb + value.rgb*value.a;
+                        //result.a = (1.0 - value.a) * result.a + value.a;
+                        if(result.a >= 0.99)
+                        {
+                            result.a = 1.0;
+                            break;
+                        }
+                        //if(i >= steps || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                            //break;
+                        if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                            break;
+                        actualPos += diff1;
+                    }
+                }
+                gl_FragColor = result;
+            }
+
+        </script>
+
+        <script type="x-shader/x-fragment" id="mipfshader">
+
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+
+            uniform sampler2D frontFace;
+            uniform sampler2D backFace;
+            uniform sampler2D volume;
+
+            uniform vec2 size;
+            uniform float alphaMultiplier;
+            uniform int cntInRow;
+            uniform float step;
+            uniform float zSize;
+
+            vec2 mappingFce(vec3 position, int sideCnt){
+            float partSide = float(1) / float(sideCnt);
+
+            int imgCount = int(position.z * (float(1) / zSize));
+
+            int yMul = int(imgCount / sideCnt);
+            int xMul = int(imgCount - (yMul*sideCnt));
+
+            float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
+            float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
+
+            return vec2(xPos, yPos);
+            }
+
+            void main()
+            {
+                float am = alphaMultiplier/0.004;
+
+                vec4 value = vec4(0.0);
+
+                vec2 fragCoord = gl_FragCoord.xy/size;
+                vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
+                vec3 backPos = texture2D(backFace, fragCoord).rgb;
+                vec3 direction = normalize(backPos - frontPos);
+
+                vec3 actualPos = frontPos;
+
+                if(length(direction) > 0.01)
+                {
+                    int steps = int(floor(length(direction)/step));
+                    vec3 diff1 = direction / float(steps);
+
+                    for (int i=0; i < 20000; i++) 
+                    {
+                        vec4 v = texture2D(volume, mappingFce(actualPos.xyz, cntInRow));
+                        
+                        if(v.r > value.r)
+                        {
+                            value = v;
+                        }
+                        
+                        if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                            break;
+                        actualPos += diff1;
+                    }
+                }
+
+                value = vec4(value.rgb * am, 1.);
+
+                gl_FragColor = value;
+            }
+
+        </script>
+
+        <script type="x-shader/x-fragment" id="isofshader">
+
+            #ifdef GL_ES
+            precision highp float;
+            #endif
+
+            uniform sampler2D frontFace;
+            uniform sampler2D backFace;
+            uniform sampler2D volume;
+
+            uniform vec2 size;
+            uniform float alphaMultiplier;
+            uniform int cntInRow;
+            uniform float step;
+            uniform float zSize;
+            uniform int textureSide;
+
+            vec3 lightPos = vec3(-10., -20., 10.);
+            float diffuse = 0.5;
+
+            vec3 s1;
+            vec3 s2;
+
+            vec2 mappingFce(vec3 position, int sideCnt){
+                float partSide = float(1) / float(sideCnt);
+
+                int imgCount = int(position.z * (float(1) / zSize));
+
+                int yMul = int(imgCount / sideCnt);
+                int xMul = int(imgCount - (yMul*sideCnt));
+
+                float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
+                float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
+                    
+                return vec2(xPos, yPos);
+            }
+
+            void main()
+            {
+                vec4 value = vec4(0.0);
+                float Idiff = 0.;
+
+                vec2 fragCoord = gl_FragCoord.xy/size;
+                vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
+                vec3 backPos = texture2D(backFace, fragCoord).rgb;
+                vec3 direction = normalize(backPos - frontPos);
+
+                vec3 isoColor = vec3(0.004*245., 0.004*228., 0.004*203.);
+
+                vec3 actualPos = frontPos;
+
+                float space = 1. / float(textureSide);
+
+                if(length(direction) > 0.01)
+                {
+                    int steps = int(floor(length(direction)/step));
+                    vec3 diff1 = direction / float(steps);
+
+                    for (int i=0; i < 10000; i++)
+                    {
+                        vec2 mappedPos = mappingFce(actualPos.xyz, cntInRow);
+                        vec4 v = texture2D(volume, mappedPos);
+
+                        if(v.r > 0.08)
+                        {
+                            //value.rgb = isoColor * v.r;
+                            value.rgb = isoColor;
+                            value.a = 1.;
+
+                            //shading
+                            s1.x = texture2D(volume, vec2(mappedPos.x - space, mappedPos.y)).g;
+                            s2.x = texture2D(volume, vec2(mappedPos.x + space, mappedPos.y)).g;
+                            s1.y = texture2D(volume, vec2(mappedPos.x, mappedPos.y - space)).g;
+                            s2.y = texture2D(volume, vec2(mappedPos.x, mappedPos.y + space)).g;
+                            s1.z = texture2D(volume, mappingFce(vec3(actualPos.x,actualPos.y,actualPos.z-space), cntInRow)).g;
+                            s2.z = texture2D(volume, mappingFce(vec3(actualPos.x,actualPos.y,actualPos.z+space), cntInRow)).g;
+
+                            //value.rgb = normalize(s2 - s1);
+                            vec3 normal = normalize(s2 - s1);
+                            vec3 L = normalize(lightPos - actualPos);
+                            Idiff = diffuse * max(dot(normal,L), 0.0);
+                            Idiff = clamp(Idiff, 0.0, 1.0);  
+
+                            break;
+                        }
+                        
+                        if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                            break;
+                        actualPos += diff1;
+                    }
+                }
+                //gl_FragColor = value;
+                gl_FragColor = value * Idiff + value * 0.25;
+            }
+
+        </script>
+
+        <script>
+            var isRunning = false;
+
+            var scene, frontScene, backScene;
+            var camera, renderer;
+            var WIDTH,
+                HEIGHT;
+            var gl;
+            var volumeCube;
+            var sizeOfTexture = 8192;
+            var sizeOfImage = 512;
+            var rayCastStep = 0.0005;
+            var sizeInZ = 0.007;
+            var sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
+            var loader;
+            var frontTexture, backTexture, volumeTexture, lutTexture;
+            var oblickyTexture, hlavaTexture;
+            var isLoaded = [false, false, false];
+            var dataImages = new Array(3);
+
+            init();
+            animate();
+
+
+            function startLoop(state) {
+
+                if (state && !isRunning) {
+                    isRunning = true;
+                    animate();             /// starts loop
+
+                } else if (!state && isRunning) {
+                    isRunning = false;
+                }
+            }
+
+            function init() {
+                for (i = 0; i < 3; i++) {
+                    dataImages[i] = new Array(512);
+                }
+
+                // Create the scene and set the scene size.
+                scene = new THREE.Scene();
+                frontScene = new THREE.Scene();
+                backScene = new THREE.Scene();
+
+                WIDTH = 800;
+                HEIGHT = 600;
+
+                // Create a renderer and add it to the DOM.
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(WIDTH, HEIGHT);
+                document.getElementById("output").appendChild(renderer.domElement);
+
+                var canvas = renderer.domElement;
+                canvas.onmousedown = function (e) {
+                    startLoop(true);
+                }
+                canvas.onmouseup = function (e) {
+                    startLoop(false);
+                }
+                canvas.onmousewheel = function (e) {
+                    startLoop(true);
+                    animate();
+                    startLoop(false);
+                }
+
+                // Initialize the GL context
+                gl = initWebGL(canvas);
+
+                // Create a camera, zoom it out from the model a bit, and add it to the scene.
+                camera = new THREE.PerspectiveCamera(
+                35,         // Field of view
+                WIDTH / HEIGHT,  // Aspect ratio
+                .1,         // Near
+                10000       // Far
+                );
+                camera.position.set(0, 0, -3);
+                camera.lookAt(new THREE.Vector3(0, 0, 0));
+                frontScene.add(camera);
+                backScene.add(camera);
+                scene.add(camera);
+
+                // Create an event listener that resizes the renderer with the browser window.
+                window.addEventListener('resize', function () {
+                    renderer.setSize(WIDTH, HEIGHT);
+                    camera.aspect = WIDTH / HEIGHT;
+                    camera.updateProjectionMatrix();
+                });
+
+                // Set the background color of the scene.
+                renderer.setClearColor(0x333F47);
+
+                // Create a light, set its position, and add it to the scene.
+                //var light = new THREE.PointLight(0xffffff);
+                //light.position.set(-100, 200, 100);
+                //frontScene.add(light);
+                //backScene.add(light);
+                //scene.add(light);
+
+                //LUT image
+                loader = new THREE.TextureLoader()
+                lutTexture = loader.load("lut/myLut4.png");
+                
+                //Load dataset
+                hlavaTexture = preprocessData("volumes/HEAD/", hlavaTexture, 83, 0);
+                oblickyTexture = preprocessData("volumes/SET1/", oblickyTexture, 361, 1);
+                torsoTexture = preprocessData("volumes/TORSO/", oblickyTexture, 394, 2);
+
+                volumeTexture = hlavaTexture;
+
+                //Create cube
+                var frontCube = baseFrontCube(createCubeGeometry());
+                var backCube = baseBackCube(createCubeGeometry());
+                frontScene.add(frontCube);
+                backScene.add(backCube);
+
+                //texture for front face
+                frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat });
+                backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat });
+
+                volumeCube = rayCube(createCubeGeometry(), sideImgCount);
+                scene.add(volumeCube);
+
+                // Add OrbitControls so that we can pan around with the mouse.
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+            }
+
+            function createCubeGeometry() {
+                //load geometry
+                var cubeGeometry = new THREE.Geometry();
+
+                //add vertices
+                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, -0.5, -0.5));//0
+                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, 0.5, -0.5));//1
+                cubeGeometry.vertices.push(new THREE.Vector3(0.5, 0.5, -0.5));//2
+                cubeGeometry.vertices.push(new THREE.Vector3(0.5, -0.5, -0.5));//3
+                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, -0.5, 0.5));//4
+                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, 0.5, 0.5));//5
+                cubeGeometry.vertices.push(new THREE.Vector3(0.5, 0.5, 0.5));//6
+                cubeGeometry.vertices.push(new THREE.Vector3(0.5, -0.5, 0.5));//7
+
+                //front
+                cubeGeometry.faces.push(new THREE.Face3(0, 1, 2));
+                cubeGeometry.faces[0].vertexColors[0] = new THREE.Color(0, 0, 0);
+                cubeGeometry.faces[0].vertexColors[1] = new THREE.Color(0, 1, 0);
+                cubeGeometry.faces[0].vertexColors[2] = new THREE.Color(1, 1, 0);
+                cubeGeometry.faces.push(new THREE.Face3(0, 2, 3));
+                cubeGeometry.faces[1].vertexColors[0] = new THREE.Color(0, 0, 0);
+                cubeGeometry.faces[1].vertexColors[1] = new THREE.Color(1, 1, 0);
+                cubeGeometry.faces[1].vertexColors[2] = new THREE.Color(1, 0, 0);
+                //bot
+                cubeGeometry.faces.push(new THREE.Face3(0, 4, 1));
+                cubeGeometry.faces[2].vertexColors[0] = new THREE.Color(0, 0, 0);
+                cubeGeometry.faces[2].vertexColors[1] = new THREE.Color(0, 0, 1);
+                cubeGeometry.faces[2].vertexColors[2] = new THREE.Color(0, 1, 0);
+                cubeGeometry.faces.push(new THREE.Face3(1, 4, 5));
+                cubeGeometry.faces[3].vertexColors[0] = new THREE.Color(0, 1, 0);
+                cubeGeometry.faces[3].vertexColors[1] = new THREE.Color(0, 0, 1);
+                cubeGeometry.faces[3].vertexColors[2] = new THREE.Color(0, 1, 1);
+                //top
+                cubeGeometry.faces.push(new THREE.Face3(2, 6, 7));
+                cubeGeometry.faces[4].vertexColors[0] = new THREE.Color(1, 1, 0);
+                cubeGeometry.faces[4].vertexColors[1] = new THREE.Color(1, 1, 1);
+                cubeGeometry.faces[4].vertexColors[2] = new THREE.Color(1, 0, 1);
+                cubeGeometry.faces.push(new THREE.Face3(3, 2, 7));
+                cubeGeometry.faces[5].vertexColors[0] = new THREE.Color(1, 0, 0);
+                cubeGeometry.faces[5].vertexColors[1] = new THREE.Color(1, 1, 0);
+                cubeGeometry.faces[5].vertexColors[2] = new THREE.Color(1, 0, 1);
+                //left
+                cubeGeometry.faces.push(new THREE.Face3(0, 7, 4));
+                cubeGeometry.faces[6].vertexColors[0] = new THREE.Color(0, 0, 0);
+                cubeGeometry.faces[6].vertexColors[1] = new THREE.Color(1, 0, 1);
+                cubeGeometry.faces[6].vertexColors[2] = new THREE.Color(0, 0, 1);
+                cubeGeometry.faces.push(new THREE.Face3(0, 3, 7));
+                cubeGeometry.faces[7].vertexColors[0] = new THREE.Color(0, 0, 0);
+                cubeGeometry.faces[7].vertexColors[1] = new THREE.Color(1, 0, 0);
+                cubeGeometry.faces[7].vertexColors[2] = new THREE.Color(1, 0, 1);
+                //right
+                cubeGeometry.faces.push(new THREE.Face3(1, 5, 6));
+                cubeGeometry.faces[8].vertexColors[0] = new THREE.Color(0, 1, 0);
+                cubeGeometry.faces[8].vertexColors[1] = new THREE.Color(0, 1, 1);
+                cubeGeometry.faces[8].vertexColors[2] = new THREE.Color(1, 1, 1);
+                cubeGeometry.faces.push(new THREE.Face3(1, 6, 2));
+                cubeGeometry.faces[9].vertexColors[0] = new THREE.Color(0, 1, 0);
+                cubeGeometry.faces[9].vertexColors[1] = new THREE.Color(1, 1, 1);
+                cubeGeometry.faces[9].vertexColors[2] = new THREE.Color(1, 1, 0);
+                //back
+                cubeGeometry.faces.push(new THREE.Face3(5, 7, 6));
+                cubeGeometry.faces[10].vertexColors[0] = new THREE.Color(0, 1, 1);
+                cubeGeometry.faces[10].vertexColors[1] = new THREE.Color(1, 0, 1);
+                cubeGeometry.faces[10].vertexColors[2] = new THREE.Color(1, 1, 1);
+                cubeGeometry.faces.push(new THREE.Face3(5, 4, 7));
+                cubeGeometry.faces[11].vertexColors[0] = new THREE.Color(0, 1, 1);
+                cubeGeometry.faces[11].vertexColors[1] = new THREE.Color(0, 0, 1);
+                cubeGeometry.faces[11].vertexColors[2] = new THREE.Color(1, 0, 1);
+
+                return cubeGeometry;
+            }
+
+            function baseFrontCube(cubeGeometry) {
+                var cubeMaterial = new THREE.MeshBasicMaterial({
+                    side: THREE.FrontSide,
+                    vertexColors: THREE.VertexColors
+                });
+
+                return new THREE.Mesh(cubeGeometry, cubeMaterial);
+            }
+
+            function baseBackCube(cubeGeometry) {
+                var cubeMaterial = new THREE.MeshBasicMaterial({
+                    side: THREE.BackSide,
+                    vertexColors: THREE.VertexColors
+                });
+
+                return new THREE.Mesh(cubeGeometry, cubeMaterial);
+            }
+
+            function rayCube(cubeGeometry, imagesOnSide) {
+                var shaderMaterial = returnMaterialVolumeXray();
+
+                return new THREE.Mesh(cubeGeometry, shaderMaterial);
+            }
+
+            function returnMaterialVolumeXray() {
+                var baseUniforms = {
+                    frontFace: { type: "t", value: frontTexture },
+                    backFace: { type: "t", value: backTexture },
+                    volume: { type: "t", value: volumeTexture },
+                    size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
+                    alphaMultiplier: { type: "f", value: alphaMul },
+                    cntInRow: { type: "i", value: sideImgCount },
+                    step: { type: "f", value: rayCastStep },
+                    zSize: { type: "f", value: sizeInZ }
+                };
+                var shaderMaterial =
+                new THREE.ShaderMaterial({
+                    uniforms: baseUniforms,
+                    vertexShader: document.getElementById('vertexshader').innerHTML,
+                    fragmentShader: document.getElementById('xrayfshader').innerHTML
+                });
+
+                return shaderMaterial;
+            }
+
+            function returnMaterialVolumeLUT() {
+                var uniforms = {
+                    frontFace: { type: "t", value: frontTexture },
+                    backFace: { type: "t", value: backTexture },
+                    volume: { type: "t", value: volumeTexture },
+                    transferFce: { type: "t", value: lutTexture },
+                    size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
+                    alphaMultiplier: { type: "f", value: alphaMul },
+                    cntInRow: { type: "i", value: sideImgCount },
+                    step: { type: "f", value: rayCastStep },
+                    zSize: { type: "f", value: sizeInZ }
+                };
+
+                var shaderMaterial =
+                new THREE.ShaderMaterial({
+                    uniforms: uniforms,
+                    vertexShader: document.getElementById('vertexshader').innerHTML,
+                    fragmentShader: document.getElementById('lutfshader').innerHTML
+                });
+
+                return shaderMaterial;
+            }
+
+            function returnMaterialVolumeMip() {
+                var baseUniforms = {
+                    frontFace: { type: "t", value: frontTexture },
+                    backFace: { type: "t", value: backTexture },
+                    volume: { type: "t", value: volumeTexture },
+                    size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
+                    alphaMultiplier: { type: "f", value: alphaMul },
+                    cntInRow: { type: "i", value: sideImgCount },
+                    step: { type: "f", value: rayCastStep },
+                    zSize: { type: "f", value: sizeInZ }
+                };
+                var shaderMaterial =
+                new THREE.ShaderMaterial({
+                    uniforms: baseUniforms,
+                    vertexShader: document.getElementById('vertexshader').innerHTML,
+                    fragmentShader: document.getElementById('mipfshader').innerHTML
+                });
+
+                return shaderMaterial;
+            }
+
+            function returnMaterialVolumeIso() {
+                var baseUniforms = {
+                    frontFace: { type: "t", value: frontTexture },
+                    backFace: { type: "t", value: backTexture },
+                    volume: { type: "t", value: volumeTexture },
+                    size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
+                    alphaMultiplier: { type: "f", value: alphaMul },
+                    cntInRow: { type: "i", value: sideImgCount },
+                    step: { type: "f", value: rayCastStep },
+                    zSize: { type: "f", value: sizeInZ },
+                    textureSide: { type: "i", value: sizeOfTexture }
+                }; 
+
+                var shaderMaterial =
+                new THREE.ShaderMaterial({
+                    uniforms: baseUniforms,
+                    vertexShader: document.getElementById('vertexshader').innerHTML,
+                    fragmentShader: document.getElementById('isofshader').innerHTML
+                });
+
+                return shaderMaterial;
+            }
+
+            function animate() {
+
+                // Read more about requestAnimationFrame at http://www.paulirish.com/2011/requestanimationframe-for-smart-animating/
+                if (isRunning)
+                    requestAnimationFrame(animate);
+
+                controls.update();
+
+                // Render front cube.
+                renderer.render(frontScene, camera, frontTexture, true);
+                // Render back cube.
+                renderer.render(backScene, camera, backTexture, true);
+
+                //var canvas = document.getElementById('myCanvas');
+                //var ctx = canvas.getContext("2d");
+                //ctx.drawImage(frontTexture.texture, 0, 0);
+
+                // Render back cube.
+                renderer.render(scene, camera);
+            }
+
+            function initWebGL(canvas) {
+                gl = null;
+
+                try {
+                    // Try to grab the standard context. If it fails, fallback to experimental.
+                    gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+                }
+                catch (e) { }
+
+                // If we don't have a GL context, give up now
+                if (!gl) {
+                    alert("Unable to initialize WebGL. Your browser may not support it.");
+                    gl = null;
+                }
+
+                return gl;
+            }
+        </script>
+    </body>
+</html>
