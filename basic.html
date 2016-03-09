@@ -31,7 +31,7 @@
                 <option value="iso">Iso-surface</option>
             </select>
             <select style="display:table-cell;
-                vertical-align:middle; margin:auto;" id="QualitySelect" onchange="changeQuality(this.value)">
+                vertical-align:middle; margin:auto;" disabled="true" id="QualitySelect" onchange="changeQuality(this.value)">
                 <option value="1">High</option>
                 <option value="2">Medium</option>
                 <option value="3">Low</option>
@@ -41,7 +41,7 @@
         <div id="output"></div>
         <canvas id="myCanvas" style="display: block; border:1px solid #d3d3d3; color: black;"></canvas> 
         <script type="text/javascript">
-            var rayCastStep = 0.0005;
+            var alphaMulOneP = 0.000026;
             var alphaMul = 0.0013;
 
             function setOpacity(opacity) {
@@ -87,7 +87,7 @@
                 }
                 else if (dsNo == "3") {
                     volumeTexture = torsoTexture;
-                    sizeInZ = 0.003;
+                    sizeInZ = 0.0028;
                 }
                 setShader();
             }
@@ -98,7 +98,7 @@
                     sizeOfImage = 512;
                     rayCastStep = 0.0005;
                     alphaMul = 0.0013;
-                    var alphaMulOneP = 0.000026;
+                    alphaMulOneP = 0.000026;
                     sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
                 }
                 else if (settNo == "2") {
@@ -106,7 +106,7 @@
                     sizeOfImage = 256;
                     rayCastStep = 0.0015;
                     alphaMul = 0.004;
-                    var alphaMulOneP = 0.00008;
+                    alphaMulOneP = 0.00008;
                     sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
                 }
                 else if (settNo == "3") {
@@ -114,12 +114,12 @@
                     sizeOfImage = 128;
                     rayCastStep = 0.0025;
                     alphaMul = 0.008;
-                    var alphaMulOneP = 0.00016;
+                    alphaMulOneP = 0.00016;
                     sideImgCount = parseInt(sizeOfTexture / sizeOfImage, 10);
                 }
-                hlavaTexture = preprocessData("volumes/HEAD/", hlavaTexture, 83, 0);
-                oblickyTexture = preprocessData("volumes/SET1/", oblickyTexture, 361, 1);
-                torsoTexture = preprocessData("volumes/TORSO/", oblickyTexture, 394, 2);
+                hlavaTexture = preprocessData("volumes/HEAD/",  83, 0);
+                oblickyTexture = preprocessData("volumes/SET1/",  361, 1);
+                torsoTexture = preprocessData("volumes/TORSO/",  394, 2);
 
                 var e = document.getElementById("DateSetSelect");
                 var type = e.options[e.selectedIndex].value;
@@ -147,13 +147,19 @@
 
             uniform sampler2D frontFace;
             uniform sampler2D backFace;
-            uniform sampler2D volume;
+
+            uniform sampler2D volume1;
+            uniform sampler2D volume2;
+            uniform sampler2D volume3;
+            uniform sampler2D volume4;
 
             uniform vec2 size;
             uniform float alphaMultiplier;
             uniform float step;
             uniform int cntInRow;
             uniform float zSize;
+
+            int tNum = 0;
 
             vec2 mappingFce(vec3 position, int sideCnt){
                 float partSide = float(1) / float(sideCnt);
@@ -163,11 +169,27 @@
                 int yMul = int(imgCount / sideCnt);
                 int xMul = int(imgCount - (yMul*sideCnt));
 
+                tNum = yMul/sideCnt;
+                yMul -= tNum*sideCnt;
+
                 float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
                 float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
-                vec2 mappedPosition = vec2(xPos, yPos);
 
-                return mappedPosition;
+                return vec2(xPos, yPos);
+            }
+
+            vec4 getColor(vec2 pos){
+
+                if(tNum == 0)
+                   return texture2D(volume1, pos.xy);
+                if(tNum == 1)
+                    return texture2D(volume2, pos.xy);
+                if(tNum == 2)
+                    return texture2D(volume3, pos.xy);
+                if(tNum == 3)
+                    return texture2D(volume4, pos.xy);
+                
+                return vec4(0.);
             }
 
             void main()
@@ -190,7 +212,8 @@
                     vec3 diff1 = direction / float(steps);
 
                     for (int i=0; i < 9999; i++) {
-                        value.rgb = texture2D(volume, mappingFce(actualPos.xyz, cntInRow)).rgb;
+
+                        value = getColor(mappingFce(actualPos.xyz, cntInRow));
                         value.a = ((0.2126*value.r + 0.7152*value.g + 0.0722*value.b)*alphaMultiplier);
                         alfa += value.a;
                         if(alfa >= 0.99)
@@ -198,7 +221,7 @@
                             alfa = 1.0;
                             break;
                         }
-
+    
                         actualPos += diff1;
                         if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
                             break;
@@ -218,7 +241,12 @@
 
             uniform sampler2D frontFace;
             uniform sampler2D backFace;
-            uniform sampler2D volume;
+
+            uniform sampler2D volume1;
+            uniform sampler2D volume2;
+            uniform sampler2D volume3;
+            uniform sampler2D volume4;
+
             uniform sampler2D transferFce;
 
             uniform vec2 size;
@@ -226,6 +254,8 @@
             uniform int cntInRow;
             uniform float step;
             uniform float zSize;
+
+            int tNum = 0;
 
             vec2 mappingFce(vec3 position, int sideCnt){
                 float partSide = float(1) / float(sideCnt);
@@ -235,10 +265,27 @@
                 int yMul = int(imgCount / sideCnt);
                 int xMul = int(imgCount - (yMul*sideCnt));
 
+                tNum = yMul/sideCnt;
+                yMul -= tNum*sideCnt;
+
                 float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
                 float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
 
                 return vec2(xPos, yPos);
+            }
+
+            vec4 getColor(vec2 pos){
+
+                if(tNum == 0)
+                   return texture2D(volume1, pos.xy);
+                if(tNum == 1)
+                    return texture2D(volume2, pos.xy);
+                if(tNum == 2)
+                    return texture2D(volume3, pos.xy);
+                if(tNum == 3)
+                    return texture2D(volume4, pos.xy);
+                
+                return vec4(0.);
             }
 
             void main()
@@ -260,14 +307,12 @@
                     //float alfa = 0.0;
 
                     for (int i=0; i < 20000; i++) {
-                        vec4 v = texture2D(volume, mappingFce(actualPos.xyz, cntInRow));
+                        vec2 pos = mappingFce(actualPos.xyz, cntInRow);
+                        vec4 v = getColor(pos);
             
                         value = texture2D(transferFce, vec2(v.g, 0.5));
                         if(value.a < 0.9)
                             value.a *= alphaMultiplier*125.;
-                        //if((value.a) < 0.01) {
-                        //    value.rgb = vec3(0.0);
-                        //    value.a = 0.0; }
                         result.rgb = (1.0 - result.a) * value.rgb * value.a + result.rgb;
                         result.a = (1.0 - result.a) * value.a + result.a;
                         //result.rgb = (1.0 - value.a) * result.rgb + value.rgb*value.a;
@@ -297,7 +342,11 @@
 
             uniform sampler2D frontFace;
             uniform sampler2D backFace;
-            uniform sampler2D volume;
+
+            uniform sampler2D volume1;
+            uniform sampler2D volume2;
+            uniform sampler2D volume3;
+            uniform sampler2D volume4;
 
             uniform vec2 size;
             uniform float alphaMultiplier;
@@ -305,18 +354,37 @@
             uniform float step;
             uniform float zSize;
 
+            int tNum = 0;
+
             vec2 mappingFce(vec3 position, int sideCnt){
-            float partSide = float(1) / float(sideCnt);
+                float partSide = float(1) / float(sideCnt);
 
-            int imgCount = int(position.z * (float(1) / zSize));
+                int imgCount = int(position.z * (float(1) / zSize));
 
-            int yMul = int(imgCount / sideCnt);
-            int xMul = int(imgCount - (yMul*sideCnt));
+                int yMul = int(imgCount / sideCnt);
+                int xMul = int(imgCount - (yMul*sideCnt));
 
-            float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
-            float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
+                tNum = yMul/sideCnt;
+                yMul -= tNum*sideCnt;
 
-            return vec2(xPos, yPos);
+                float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
+                float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
+
+                return vec2(xPos, yPos);
+            }
+
+            vec4 getColor(vec2 pos){
+
+                if(tNum == 0)
+                   return texture2D(volume1, pos.xy);
+                if(tNum == 1)
+                    return texture2D(volume2, pos.xy);
+                if(tNum == 2)
+                    return texture2D(volume3, pos.xy);
+                if(tNum == 3)
+                    return texture2D(volume4, pos.xy);
+                
+                return vec4(0.);
             }
 
             void main()
@@ -339,7 +407,7 @@
 
                     for (int i=0; i < 20000; i++) 
                     {
-                        vec4 v = texture2D(volume, mappingFce(actualPos.xyz, cntInRow));
+                        vec4 v = getColor(mappingFce(actualPos.xyz, cntInRow));
                         
                         if(v.r > value.r)
                         {
@@ -367,7 +435,11 @@
 
             uniform sampler2D frontFace;
             uniform sampler2D backFace;
-            uniform sampler2D volume;
+
+            uniform sampler2D volume1;
+            uniform sampler2D volume2;
+            uniform sampler2D volume3;
+            uniform sampler2D volume4;
 
             uniform vec2 size;
             uniform float alphaMultiplier;
@@ -382,6 +454,8 @@
             vec3 s1;
             vec3 s2;
 
+            int tNum = 0;
+
             vec2 mappingFce(vec3 position, int sideCnt){
                 float partSide = float(1) / float(sideCnt);
 
@@ -390,10 +464,27 @@
                 int yMul = int(imgCount / sideCnt);
                 int xMul = int(imgCount - (yMul*sideCnt));
 
+                tNum = yMul/sideCnt;
+                yMul -= tNum*sideCnt;
+
                 float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
                 float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
-                    
+
                 return vec2(xPos, yPos);
+            }
+
+            vec4 getColor(vec2 pos){
+
+                if(tNum == 0)
+                   return texture2D(volume1, pos.xy);
+                if(tNum == 1)
+                    return texture2D(volume2, pos.xy);
+                if(tNum == 2)
+                    return texture2D(volume3, pos.xy);
+                if(tNum == 3)
+                    return texture2D(volume4, pos.xy);
+            
+                return vec4(0.);
             }
 
             void main()
@@ -420,7 +511,7 @@
                     for (int i=0; i < 10000; i++)
                     {
                         vec2 mappedPos = mappingFce(actualPos.xyz, cntInRow);
-                        vec4 v = texture2D(volume, mappedPos);
+                        vec4 v = getColor(mappedPos);
 
                         if(v.r > 0.08)
                         {
@@ -429,12 +520,12 @@
                             value.a = 1.;
 
                             //shading
-                            s1.x = texture2D(volume, vec2(mappedPos.x - space, mappedPos.y)).g;
-                            s2.x = texture2D(volume, vec2(mappedPos.x + space, mappedPos.y)).g;
-                            s1.y = texture2D(volume, vec2(mappedPos.x, mappedPos.y - space)).g;
-                            s2.y = texture2D(volume, vec2(mappedPos.x, mappedPos.y + space)).g;
-                            s1.z = texture2D(volume, mappingFce(vec3(actualPos.x,actualPos.y,actualPos.z-space), cntInRow)).g;
-                            s2.z = texture2D(volume, mappingFce(vec3(actualPos.x,actualPos.y,actualPos.z+space), cntInRow)).g;
+                            s1.x = getColor(vec2(mappedPos.x - space, mappedPos.y)).g;
+                            s2.x = getColor(vec2(mappedPos.x + space, mappedPos.y)).g;
+                            s1.y = getColor(vec2(mappedPos.x, mappedPos.y - space)).g;
+                            s2.y = getColor(vec2(mappedPos.x, mappedPos.y + space)).g;
+                            s1.z = getColor(mappingFce(vec3(actualPos.x,actualPos.y,actualPos.z-space), cntInRow)).g;
+                            s2.z = getColor(mappingFce(vec3(actualPos.x,actualPos.y,actualPos.z+space), cntInRow)).g;
 
                             //value.rgb = normalize(s2 - s1);
                             vec3 normal = normalize(s2 - s1);
@@ -450,7 +541,6 @@
                         actualPos += diff1;
                     }
                 }
-                //gl_FragColor = value;
                 gl_FragColor = value * Idiff + value * 0.25;
             }
 
@@ -559,6 +649,8 @@
 
                 // Set the background color of the scene.
                 renderer.setClearColor(0x333F47);
+                // Add OrbitControls so that we can pan around with the mouse.
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
 
                 // Create a light, set its position, and add it to the scene.
                 //var light = new THREE.PointLight(0xffffff);
@@ -572,9 +664,9 @@
                 lutTexture = loader.load("lut/myLut4.png");
                 
                 //Load dataset
-                hlavaTexture = preprocessData("volumes/HEAD/", hlavaTexture, 83, 0);
-                oblickyTexture = preprocessData("volumes/SET1/", oblickyTexture, 361, 1);
-                torsoTexture = preprocessData("volumes/TORSO/", oblickyTexture, 394, 2);
+                hlavaTexture = preprocessData("volumes/HEAD/",  83, 0);
+                oblickyTexture = preprocessData("volumes/SET1/",  361, 1);
+                torsoTexture = preprocessData("volumes/TORSO/",  394, 2);
 
                 volumeTexture = hlavaTexture;
 
@@ -590,9 +682,6 @@
 
                 volumeCube = rayCube(createCubeGeometry(), sideImgCount);
                 scene.add(volumeCube);
-
-                // Add OrbitControls so that we can pan around with the mouse.
-                controls = new THREE.OrbitControls(camera, renderer.domElement);
             }
 
             function createCubeGeometry() {
@@ -695,7 +784,10 @@
                 var baseUniforms = {
                     frontFace: { type: "t", value: frontTexture },
                     backFace: { type: "t", value: backTexture },
-                    volume: { type: "t", value: volumeTexture },
+                    volume1: { type: "t", value: volumeTexture[0] },
+                    volume2: { type: "t", value: volumeTexture[1] },
+                    volume3: { type: "t", value: volumeTexture[2] },
+                    volume4: { type: "t", value: volumeTexture[3] },
                     size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
                     alphaMultiplier: { type: "f", value: alphaMul },
                     cntInRow: { type: "i", value: sideImgCount },
@@ -716,7 +808,10 @@
                 var uniforms = {
                     frontFace: { type: "t", value: frontTexture },
                     backFace: { type: "t", value: backTexture },
-                    volume: { type: "t", value: volumeTexture },
+                    volume1: { type: "t", value: volumeTexture[0] },
+                    volume2: { type: "t", value: volumeTexture[1] },
+                    volume3: { type: "t", value: volumeTexture[2] },
+                    volume4: { type: "t", value: volumeTexture[3] },
                     transferFce: { type: "t", value: lutTexture },
                     size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
                     alphaMultiplier: { type: "f", value: alphaMul },
@@ -739,7 +834,10 @@
                 var baseUniforms = {
                     frontFace: { type: "t", value: frontTexture },
                     backFace: { type: "t", value: backTexture },
-                    volume: { type: "t", value: volumeTexture },
+                    volume1: { type: "t", value: volumeTexture[0] },
+                    volume2: { type: "t", value: volumeTexture[1] },
+                    volume3: { type: "t", value: volumeTexture[2] },
+                    volume4: { type: "t", value: volumeTexture[3] },
                     size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
                     alphaMultiplier: { type: "f", value: alphaMul },
                     cntInRow: { type: "i", value: sideImgCount },
@@ -760,7 +858,10 @@
                 var baseUniforms = {
                     frontFace: { type: "t", value: frontTexture },
                     backFace: { type: "t", value: backTexture },
-                    volume: { type: "t", value: volumeTexture },
+                    volume1: { type: "t", value: volumeTexture[0] },
+                    volume2: { type: "t", value: volumeTexture[1] },
+                    volume3: { type: "t", value: volumeTexture[2] },
+                    volume4: { type: "t", value: volumeTexture[3] },
                     size: { type: "v2", value: new THREE.Vector2(WIDTH, HEIGHT) },
                     alphaMultiplier: { type: "f", value: alphaMul },
                     cntInRow: { type: "i", value: sideImgCount },
