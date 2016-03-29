@@ -77,14 +77,25 @@
 
             function setLUT(lutNo) {
                 if (lutNo == "1")
-                    lutTexture = loader.load("lut/myLut1.png", setShader());
+                    lutTexture = loader.load("lut/myLut1.png", function myfunction(texture) {
+                        lutTexture = texture;
+                        setShader();
+                    });
                 else if (lutNo == "2")
-                    lutTexture = loader.load("lut/myLut2.png", setShader());
+                    lutTexture = loader.load("lut/myLut2.png", function myfunction(texture) {
+                        lutTexture = texture;
+                        setShader();
+                    });
                 else if (lutNo == "3")
-                    lutTexture = loader.load("lut/myLut3.png", setShader());
+                    lutTexture = loader.load("lut/myLut3.png", function myfunction(texture) {
+                        lutTexture = texture;
+                        setShader();
+                    });
                 else if (lutNo == "4")
-                    lutTexture = loader.load("lut/myLut4.png", setShader());
-                //setShader();
+                    lutTexture = loader.load("lut/myLut4.png", function myfunction(texture) {
+                        lutTexture = texture;
+                        setShader();
+                    });
             }
 
             function setDataset(dsNo) {
@@ -246,7 +257,9 @@
                 float partSide = float(1) / float(cntInRow);
                 float alfa = 0.0;
 
-                if(length(direction) > 0.001)
+                bool skip = (frontPos.x < 0.1 && frontPos.y < 0.1 && frontPos.z < 0.1) || (backPos.x < 0.1 && backPos.y < 0.1 && backPos.z < 0.1);
+
+                if(length(direction) > 0.001 && !skip)
                 {
                     int steps = int(floor(length(direction)/step));
                     vec3 diff1 = direction / float(steps);
@@ -298,7 +311,8 @@
 
             const float SpecularContribution = 0.0;
             const float DiffuseContribution = 1.0 - SpecularContribution;
-            const vec3 lightPos = vec3(0., 0., 1.);
+            const vec3 lightPos = vec3(10., -10., -10.);
+            //const vec3 lightPos = vec3(0., 0., 1.);
             
             float zCount;
 
@@ -309,7 +323,7 @@
             float actualIntensity;
             vec4 actualPoint;
             vec4 top, bottom, left, right;
-            int xOffset, yOffset;
+            float xPos, yPos;
 
             int imgIndex;
             float colorDiff;
@@ -335,22 +349,19 @@
             void mappingFceActual(vec3 position){
                 imgIndex = int(floor(position.z * zCount));
                 
-                yOffset = imgIndex / cntInRow;
-                xOffset = imgIndex - (yOffset * cntInRow);
+                int yOffset = imgIndex / cntInRow;
+                int xOffset = imgIndex - (yOffset * cntInRow);
 
                 textureIndex = yOffset/cntInRow;
                 yOffset -= textureIndex*cntInRow;
 
-                float xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                float yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
+                xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
+                yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
 
                 actualPoint = getColor(vec2(xPos, yPos));
             }
 
             void mappingFceEviroment(vec3 position){
-                float xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                float yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
-
                 right = getColor(vec2(xPos + sizeTextelX, yPos));
                 left = getColor(vec2(xPos - sizeTextelX, yPos));
                 top = getColor(vec2(xPos, yPos + sizeTextelY));
@@ -359,6 +370,7 @@
 
             float getFilteredColor(float color1, float color2){
                 
+                //return color1;
                 return color1*opositeColorDiff + color2*colorDiff;
             }
 
@@ -371,11 +383,14 @@
             }
 
             float getLightIntensity(vec3 actualPos, vec3 normal){
+                //vec3 lightVec = normalize(lightPos - actualPos);
+                //float diffuse = max(dot(lightVec, normal), 0.3);
+
                 vec3 lightVec = normalize(lightPos - actualPos);
-                vec3 viewVec = direction;
-                float diffuse = max(dot(lightVec, normal), 0.3);
+                float diffuse = clamp(dot(lightVec, normal), 0., 1.);
                 
                 //Aj odraz  
+                //vec3 viewVec = direction;
                 //vec3 reflectVec = reflect(-lightVec, normal);
                 //float spec = 0.0;
                 //if (diffuse > 0.0){
@@ -405,7 +420,8 @@
                 vec2 fragCoord = gl_FragCoord.xy/size;
                 vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
                 vec3 backPos = texture2D(backFace, fragCoord).rgb;
-                direction = normalize(backPos - frontPos);
+                vec3 path = backPos - frontPos;
+                direction = normalize(path);
                 
                 sizeTextelX = texelSize;
                 sizeTextelY = texelSize;
@@ -414,46 +430,54 @@
 
                 partSide = float(1) / float(cntInRow);
 
-                if(length(direction) > 0.01)
-                {
-                    int steps = int(floor(length(direction)/step));
-                    vec3 diff1 = direction / float(steps);
-                    //float alfa = 0.0;
+                //if(length(path) > 0.01)
+                //{
+                    float rayDistance = length(path);
+                    float actualDistance = 0.;
+
+                    vec3 diff1 = direction * step;
+                    float vDiff1 = length(diff1);
 
                     float LightIntensity = 1.0;
 
-                    for (int i=0; i < 20000; i++) {
+                    for (int i=0; i < 200000; i++) {
+
+                        if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                            break;
                         
                         mappingFceActual(actualPos);
                         comupteColorDiff(actualPos);
                         
                         actualIntensity = getFilteredColor(actualPoint.g, actualPoint.b);
 
-                        if(actualIntensity > 0.0){
+                        if(actualIntensity > 0.01){
                             mappingFceEviroment(actualPos);
                             LightIntensity = getLightIntensity(actualPos, getActualNormal());
                         
-                            value = texture2D(transferFce, vec2(actualIntensity, 0.5)) *  LightIntensity;
+                            value = texture2D(transferFce, vec2(actualIntensity, 0.5));
+                            value.rgb = clamp(value.rgb *  LightIntensity + value.rgb * 0.05, 0., 1.);
 
                             if(value.a < 0.9)
                                 value.a *= alphaMultiplier*125.;
 
                             result.rgb = (1.0 - result.a) * value.rgb * value.a + result.rgb;
                             result.a = (1.0 - result.a) * value.a + result.a;
+
+                            if(result.a >= 0.99)
+                            {
+                                result.a = 1.0;
+                                break;
+                            }
                         }
 
-                        if(result.a >= 0.99)
-                        {
-                            result.a = 1.0;
-                            break;
-                        }
-                        //if(i >= steps || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+
+                        
+                        //if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
                             //break;
-                        if(actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
-                            break;
                         actualPos += diff1;
+                        actualDistance += vDiff1;
                     }
-                }
+                //}
                 gl_FragColor = result;
             }
 
@@ -531,7 +555,7 @@
 
                 vec4 color1 = getColor(vec2(xPos, yPos));
 
-                float interpoledColor = color1.y*opositeColorDiff + color1.z*colorDiff;
+                float interpoledColor = color1.g*opositeColorDiff + color1.b*colorDiff;
 
                 return vec4(interpoledColor,interpoledColor,interpoledColor,1.);
             }
@@ -602,7 +626,7 @@
 
             const float SpecularContribution = 0.0;
             const float DiffuseContribution = 1.0 - SpecularContribution;
-            const vec3 lightPos = vec3(2., 0., -2.);
+            const vec3 lightPos = vec3(10., -10., -10.);
             
             float zCount;
 
@@ -674,11 +698,14 @@
             }
 
             float getLightIntensity(vec3 actualPos, vec3 normal){
-                vec3 lightVec = normalize(lightPos - actualPos);
-                vec3 viewVec = direction;
-                float diffuse = max(dot(lightVec, normal), 0.3);
+                //vec3 lightVec = normalize(lightPos - actualPos);
+                //float diffuse = clamp(dot(lightVec, normal), 0., 1.);
                 
+                vec3 lightVec = normalize(lightPos - actualPos);
+                float diffuse = max(dot(lightVec, normal), 0.3);
+            
                 //Aj odraz  
+                //vec3 viewVec = direction;
                 //vec3 reflectVec = reflect(-lightVec, normal);
                 //float spec = 0.0;
                 //if (diffuse > 0.0){
@@ -730,16 +757,16 @@
 
                         actualIntensity = getFilteredColor(actualPoint.g, actualPoint.b);
 
-                        if(actualIntensity > 0.0)
+                        if(actualIntensity > 0.1)
                         {
                             //value.rgb = isoColor * actualIntensity;
-                            value.rgb = isoColor;
-                            value.a = 1.;
-
                             //shading
                             mappingFceEviroment(actualPos);
                             Idiff = getLightIntensity(actualPos, getActualNormal());
                             
+                            value.rgb = clamp(isoColor * Idiff + isoColor * 0.05, 0., 1.);
+                            value.a = 1.;
+
                             break;
                         }
                         
@@ -748,7 +775,7 @@
                         actualPos += diff1;
                     }
                 }
-                gl_FragColor = value * Idiff;
+                gl_FragColor = value;
             }
 
         </script>
@@ -779,7 +806,7 @@
             var isRunning = false;
 
             var scene, frontScene, backScene;
-            var camera, renderer;
+            var camera, renderer, backRenderer, frontRenderer;
             var WIDTH,
                 HEIGHT;
             var gl;
@@ -830,15 +857,27 @@
                 HEIGHT = 600;
 
                 // Create a renderer and add it to the DOM.
+                //backRenderer = new THREE.WebGLRenderer({ antialias: true});
+                //backRenderer.setClearColor(0x000000, 0);
+                //backRenderer.setSize(WIDTH, HEIGHT);
+                //frontRenderer = new THREE.WebGLRenderer({ antialias: true});
+                //frontRenderer.setClearColor(0x000000, 0);
+                //frontRenderer.setSize(WIDTH, HEIGHT);
                 renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setSize(WIDTH, HEIGHT);
                 document.getElementById("output").appendChild(renderer.domElement);
+                //document.getElementById("output").appendChild(frontRenderer.domElement);
+                //document.getElementById("output").appendChild(backRenderer.domElement);
 
                 var canvas = renderer.domElement;
+                //var canvasf = frontRenderer.domElement;
+                //var canvasb = backRenderer.domElement;
                 SetupRenderEvents(canvas);
 
                 // Initialize the GL context
                 gl = initWebGL(canvas);
+                //initWebGL(canvasf);
+                //initWebGL(canvasb);
 
                 // Create a camera, zoom it out from the model a bit, and add it to the scene.
                 camera = new THREE.PerspectiveCamera(
@@ -861,9 +900,11 @@
                 });
 
                 // Set the background color of the scene.
-                renderer.setClearColor(0x000000);
+                renderer.setClearColor(0x000000, 0);
                 // Add OrbitControls so that we can pan around with the mouse.
                 controls = new THREE.OrbitControls(camera, renderer.domElement);
+                //controls = new THREE.OrbitControls(camera, backRenderer.domElement);
+                //controls = new THREE.OrbitControls(camera, frontRenderer.domElement);
 
                 // Create a light, set its position, and add it to the scene.
                 //var light = new THREE.PointLight(0xffffff);
@@ -891,14 +932,23 @@
                 backScene.add(backCube);
 
                 //texture for front face
+                //frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, {
+                //    minFilter: THREE.LinearFilter,
+                //    stencilBuffer: false,
+                //    depthBuffer: false
+                //});
+                //backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, {
+                //    minFilter: THREE.LinearFilter,
+                //    stencilBuffer: false,
+                //    depthBuffer: false
+                //});
+
                 frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat });
                 backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat });
 
                 volumeCube = rayCube(createCubeGeometry(), sideImgCount);
                 //scene.add(frontCube);
                 scene.add(volumeCube);
-                
-                //changeQuality("2");
             }
 
             function createCubeGeometry() {
@@ -1108,8 +1158,14 @@
                 controls.update();
 
                 // Render front cube.
+                //frontTexture.texture.magFilter = THREE.NearestFilter;
+                //frontTexture.texture.minFilter = THREE.NearestFilter;
+                //frontRenderer.render(frontScene, camera);
                 renderer.render(frontScene, camera, frontTexture, true);
                 // Render back cube.
+                //backTexture.texture.magFilter = THREE.NearestFilter;
+                //backTexture.texture.minFilter = THREE.NearestFilter;
+                //backRenderer.render(backScene, camera);
                 renderer.render(backScene, camera, backTexture, true);
 
                 //var c = document.getElementById("myCanvas");
@@ -1118,6 +1174,8 @@
 
                 renderer.render(scene, camera);
             }
+
+
 
             function initWebGL(canvas) {
                 gl = null;

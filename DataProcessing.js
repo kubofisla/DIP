@@ -122,12 +122,12 @@ function preprocessData(pathDir, count, dataSetIndex) {
                     workingImageData[1].data[i] = workingImageData[0].data[i + 1];          //red
                                                                                             //green
                 if (!workingImageData[2])
-                    workingImageData[1].data[i] = 0;
+                    workingImageData[1].data[i + 2] = 0;
                 else
                     workingImageData[1].data[i + 2] = workingImageData[2].data[i + 1];      //blue
 
                 if (!workingImageData[3])
-                    workingImageData[1].data[i] = 0;
+                    workingImageData[1].data[i + 3] = 0;
                 else
                     workingImageData[1].data[i + 3] = workingImageData[3].data[i + 1];      //alpha
             }
