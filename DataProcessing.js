@@ -26,8 +26,11 @@ function preprocessData(pathDir, count, dataSetIndex) {
 
     for (var i = 0; i < maxTextures; i++) {
         //create canvas context
-        //var canvas = document.getElementById('myCanvas');
-        var canvas = document.createElement('canvas');
+        var canvas;
+        //if(i == 0)
+        //    canvas = document.getElementById('myCanvas');
+        //else
+            canvas = document.createElement('canvas');
         canvas.width = maxSide;
         canvas.height = maxSide;
         ctx.push(canvas.getContext("2d"));

@@ -257,9 +257,9 @@
                 float partSide = float(1) / float(cntInRow);
                 float alfa = 0.0;
 
-                bool skip = (frontPos.x < 0.1 && frontPos.y < 0.1 && frontPos.z < 0.1) || (backPos.x < 0.1 && backPos.y < 0.1 && backPos.z < 0.1);
+                //bool skip = (frontPos.x < 0.1 && frontPos.y < 0.1 && frontPos.z < 0.1) || (backPos.x < 0.1 && backPos.y < 0.1 && backPos.z < 0.1);
 
-                if(length(direction) > 0.001 && !skip)
+                if(length(direction) > 0.001) // && !skip)
                 {
                     int steps = int(floor(length(direction)/step));
                     vec3 diff1 = direction / float(steps);
