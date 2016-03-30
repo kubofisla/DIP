@@ -39,8 +39,9 @@ function preprocessData(pathDir, count, dataSetIndex) {
         var tx = new THREE.Texture(canvas);
         //tx.magFilter = THREE.NearestFilter;
         //tx.minFilter = THREE.NearestFilter;
-        tx.magFilter = THREE.LinearFilter;
-        tx.minFilter = THREE.LinearFilter;
+        //tx.magFilter = THREE.LinearFilter;
+        //tx.minFilter = THREE.LinearFilter;
+        tx.anisotropy = renderer.getMaxAnisotropy();
         texture.push(tx);
     }
 
