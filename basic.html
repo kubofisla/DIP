@@ -38,6 +38,7 @@
             </select>
             <input name="OpacityBar" type="range" id="sliderBar" min="0" max="100" step="1" value="50" onChange="setOpacity(this.value);" />
             <label><input type='checkbox' onclick='setBackground(this);'>Debug background</label>
+            <input name="TrasholdBar" type="range" id="sliderBar" min="0" max="100" step="1" value="5" onChange="trasholdChange(this.value);" /> <label id="TrasholdLabel">Dens. trashold</label>
         </div>
         
         <div id="output"></div>
@@ -47,9 +48,16 @@
         <script type="text/javascript">
             var alphaMulOneP = 0.000026;
             var alphaMul = 0.0013;
+            var intensityT = 0.05;
 
             function setOpacity(opacity) {
                 alphaMul = opacity * alphaMulOneP;
+                setShader();
+            }
+
+            function trasholdChange(density) {
+                intensityT = density / 100.;
+                document.getElementById('TrasholdLabel').innerHTML = intensityT;
                 setShader();
             }
 
@@ -432,50 +440,47 @@
 
                 partSide = float(1) / float(cntInRow);
 
-                //if(length(path) > 0.01)
-                //{
-                    float rayDistance = length(path);
-                    float actualDistance = 0.;
+                float rayDistance = length(path);
+                float actualDistance = 0.;
 
-                    vec3 diff1 = direction * step;
-                    float vDiff1 = length(diff1);
+                vec3 diff1 = direction * step;
+                float vDiff1 = length(diff1);
 
-                    float LightIntensity = 1.0;
+                float LightIntensity = 1.0;
 
-                    for (int i=0; i < 20000; i++) {
+                for (int i=0; i < 20000; i++) {
 
-                        if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                    if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
+                        break;
+                        
+                    mappingFceActual(actualPos);
+                    comupteColorDiff(actualPos);
+                        
+                    actualIntensity = getFilteredColor(actualPoint.g, actualPoint.b);
+
+                    if(actualIntensity > 0.01){
+                        mappingFceEviroment(actualPos);
+                        LightIntensity = getLightIntensity(actualPos, getActualNormal());
+                        
+                        value = texture2D(transferFce, vec2(actualIntensity, 0.5));
+                        value.rgb = clamp(value.rgb *  LightIntensity + value.rgb * 0.05, 0., 1.);
+
+                        if(value.a < 0.9)
+                            value.a *= alphaMultiplier*125.;
+
+                        result.rgb = (1.0 - result.a) * value.rgb * value.a + result.rgb;
+                        result.a = (1.0 - result.a) * value.a + result.a;
+
+                        if(result.a >= 0.99)
+                        {
+                            result.a = 1.0;
                             break;
-                        
-                        mappingFceActual(actualPos);
-                        comupteColorDiff(actualPos);
-                        
-                        actualIntensity = getFilteredColor(actualPoint.g, actualPoint.b);
-
-                        if(actualIntensity > 0.01){
-                            mappingFceEviroment(actualPos);
-                            LightIntensity = getLightIntensity(actualPos, getActualNormal());
-                        
-                            value = texture2D(transferFce, vec2(actualIntensity, 0.5));
-                            value.rgb = clamp(value.rgb *  LightIntensity + value.rgb * 0.05, 0., 1.);
-
-                            if(value.a < 0.9)
-                                value.a *= alphaMultiplier*125.;
-
-                            result.rgb = (1.0 - result.a) * value.rgb * value.a + result.rgb;
-                            result.a = (1.0 - result.a) * value.a + result.a;
-
-                            if(result.a >= 0.99)
-                            {
-                                result.a = 1.0;
-                                break;
-                            }
                         }
-
-                        actualPos += diff1;
-                        actualDistance += vDiff1;
                     }
-                //}
+
+                    actualPos += diff1;
+                    actualDistance += vDiff1;
+                }
                 gl_FragColor = result;
             }
 
@@ -623,6 +628,8 @@
             uniform float zSize;
             uniform int textureSide;
             uniform float texelSize;
+            
+            uniform float intensityTreshold;
 
             const float SpecularContribution = 0.0;
             const float DiffuseContribution = 1.0 - SpecularContribution;
@@ -661,7 +668,7 @@
                 return vec4(0.);
             }
 
-            void mappingFceActual(vec3 position){
+            vec4 mappingFceActual(vec3 position){
                 imgIndex = int(floor(position.z * zCount));
                 
                 int yOffset = imgIndex / cntInRow;
@@ -674,6 +681,28 @@
                 yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
 
                 actualPoint = getColor(vec2(xPos, yPos));
+
+                //yOffset = (imgIndex+1) / cntInRow;
+                //xOffset = (imgIndex+1) - (yOffset * cntInRow);
+
+                //int textureIndex2 = yOffset/cntInRow;
+                //yOffset -= textureIndex2*cntInRow;
+
+                //float xPos2 = (position.x / float(cntInRow)) + (partSide * float(xOffset));
+                //float yPos2 = (position.y / float(cntInRow)) + (partSide * float(yOffset));
+
+                //vec2 pos = vec2(xPos2, yPos2);
+
+                //if(textureIndex2 == 0)
+                //    return texture2D(volume1, pos.xy);
+                //if(textureIndex2 == 1)
+                //    return texture2D(volume2, pos.xy);
+                //if(textureIndex2 == 2)
+                //    return texture2D(volume3, pos.xy);
+                //if(textureIndex2 == 3)
+                //    return texture2D(volume4, pos.xy);
+
+                return vec4(0.);
             }
 
             void mappingFceEviroment(vec3 position){
@@ -718,10 +747,10 @@
             }
 
             void comupteColorDiff(vec3 actualPos){
-                float zAxis = actualPos.z * zCount;
-                int imgIndex = int(floor(zAxis));
+                float zAxis = actualPos.z / zSize;
 
-                colorDiff = zAxis - float(imgIndex);
+                colorDiff = zAxis - floor(zAxis);
+                //colorDiff = 1.;
                 opositeColorDiff = 1. - colorDiff;
             }
 
@@ -759,18 +788,20 @@
                     if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
                         break;
 
-                    mappingFceActual(actualPos);
+                    vec4 nextPoint = mappingFceActual(actualPos);
                     comupteColorDiff(actualPos);
 
-                    actualIntensity = getFilteredColor(actualPoint.g, actualPoint.b);
+                    actualIntensity = getFilteredColor(actualPoint.y, actualPoint.z);
 
-                    if(actualIntensity > 0.15)
+                    if(actualIntensity > intensityTreshold)
                     {
                         //value.rgb = isoColor * actualIntensity;
                         //shading
                         mappingFceEviroment(actualPos);
                         Idiff = getLightIntensity(actualPos, getActualNormal());
                             
+                        
+                        //value.rgb = isoColor;
                         value.rgb = clamp(isoColor * Idiff + isoColor * 0.05, 0., 1.);
                         value.a = 1.;
 
@@ -862,29 +893,17 @@
                 HEIGHT = 600;
 
                 // Create a renderer and add it to the DOM.
-                //backRenderer = new THREE.WebGLRenderer({ antialias: true});
-                //backRenderer.setClearColor(0x000000, 0);
-                //backRenderer.setSize(WIDTH, HEIGHT);
-                //frontRenderer = new THREE.WebGLRenderer({ antialias: true});
-                //frontRenderer.setClearColor(0x000000, 0);
-                //frontRenderer.setSize(WIDTH, HEIGHT);
                 renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setSize(WIDTH, HEIGHT);
                 renderer.setPixelRatio(window.devicePixelRatio);
                 renderer.autoClear = false;
                 document.getElementById("output").appendChild(renderer.domElement);
-                //document.getElementById("output").appendChild(frontRenderer.domElement);
-                //document.getElementById("output").appendChild(backRenderer.domElement);
 
                 var canvas = renderer.domElement;
-                //var canvasf = frontRenderer.domElement;
-                //var canvasb = backRenderer.domElement;
                 SetupRenderEvents(canvas);
 
                 // Initialize the GL context
                 gl = initWebGL(canvas);
-                //initWebGL(canvasf);
-                //initWebGL(canvasb);
 
                 // Create a camera, zoom it out from the model a bit, and add it to the scene.
                 camera = new THREE.PerspectiveCamera(
@@ -910,15 +929,6 @@
                 renderer.setClearColor(0x000000, 0);
                 // Add OrbitControls so that we can pan around with the mouse.
                 controls = new THREE.OrbitControls(camera, renderer.domElement);
-                //controls = new THREE.OrbitControls(camera, backRenderer.domElement);
-                //controls = new THREE.OrbitControls(camera, frontRenderer.domElement);
-
-                // Create a light, set its position, and add it to the scene.
-                //var light = new THREE.PointLight(0xffffff);
-                //light.position.set(-100, 200, 100);
-                //frontScene.add(light);
-                //backScene.add(light);
-                //scene.add(light);
 
                 //LUT image
                 loader = new THREE.TextureLoader()
@@ -938,20 +948,8 @@
                 frontScene.add(frontCube);
                 backScene.add(backCube);
 
-                //texture for front face
-                //frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, {
-                //    minFilter: THREE.LinearFilter,
-                //    stencilBuffer: false,
-                //    depthBuffer: false
-                //});
-                //backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, {
-                //    minFilter: THREE.LinearFilter,
-                //    stencilBuffer: false,
-                //    depthBuffer: false
-                //});
-
-                frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat });
-                backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat });
+                frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.FloatType });
+                backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.FloatType });
 
                 volumeCube = rayCube(createCubeGeometry(), sideImgCount);
                 //scene.add(frontCube);
@@ -1143,7 +1141,8 @@
                     step: { type: "f", value: rayCastStep },
                     zSize: { type: "f", value: sizeInZ },
                     textureSide: { type: "i", value: sizeOfTexture },
-                    texelSize: { type: "f", value: 1. / sizeOfTexture }
+                    texelSize: { type: "f", value: 1. / sizeOfTexture },
+                    intensityTreshold: { type: "f", value: intensityT },
                 }; 
 
                 var shaderMaterial =
@@ -1165,19 +1164,11 @@
                 controls.update();
 
                 // Render front cube.
-                //frontTexture.texture.magFilter = THREE.NearestFilter;
-                //frontTexture.texture.minFilter = THREE.NearestFilter;
-                //frontRenderer.render(frontScene, camera);
                 renderer.render(frontScene, camera, frontTexture, true);
+                //frontTexture.texture.anisotropy = renderer.getMaxAnisotropy();
                 // Render back cube.
-                //backTexture.texture.magFilter = THREE.NearestFilter;
-                //backTexture.texture.minFilter = THREE.NearestFilter;
-                //backRenderer.render(backScene, camera);
                 renderer.render(backScene, camera, backTexture, true);
-
-                //var c = document.getElementById("myCanvas");
-                //var ctx = c.getContext("2d");
-                //ctx.drawImage(new Image(frontTexture.), 10, 10);
+                //backTexture.texture.anisotropy = renderer.getMaxAnisotropy();
 
                 renderer.render(scene, camera);
             }

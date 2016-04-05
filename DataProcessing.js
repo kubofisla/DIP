@@ -27,10 +27,8 @@ function preprocessData(pathDir, count, dataSetIndex) {
     for (var i = 0; i < maxTextures; i++) {
         //create canvas context
         var canvas;
-        //if(i == 0)
-        //    canvas = document.getElementById('myCanvas');
-        //else
-            canvas = document.createElement('canvas');
+        //canvas = document.getElementById('myCanvas');
+        canvas = document.createElement('canvas');
         canvas.width = maxSide;
         canvas.height = maxSide;
         ctx.push(canvas.getContext("2d"));
@@ -41,7 +39,7 @@ function preprocessData(pathDir, count, dataSetIndex) {
         //tx.minFilter = THREE.NearestFilter;
         //tx.magFilter = THREE.LinearFilter;
         //tx.minFilter = THREE.LinearFilter;
-        tx.anisotropy = renderer.getMaxAnisotropy();
+        //tx.anisotropy = renderer.getMaxAnisotropy();
         texture.push(tx);
     }
 
@@ -77,6 +75,7 @@ function preprocessData(pathDir, count, dataSetIndex) {
         else
         {                          
             var img = new Image;
+            img.crossOrigin = 'anonymous';
             img.src = names[i];
             img.onload = function () {
                 imageSize = img.naturalWidth;
