@@ -24,7 +24,7 @@
                 <option value="3">Hard tissue</option>
             </select>
             <select style="display:table-cell;
-                vertical-align:middle; margin:auto;" id="ShaderType" onchange="setShader()">
+                vertical-align:middle; margin:auto;" id="ShaderType" onchange="makeAnimate()"> <!--onchange="setShader()">-->
                 <option value="xray">X-Ray</option>
                 <option value="render">Render</option>
                 <option value="mip">MIP</option>
@@ -39,6 +39,7 @@
             <input name="OpacityBar" type="range" id="sliderBar" min="0" max="100" step="1" value="50" onChange="setOpacity(this.value);" />
             <label><input type='checkbox' onclick='setBackground(this);'>Debug background</label>
             <input name="TrasholdBar" type="range" id="sliderBar" min="0" max="100" step="1" value="5" onChange="trasholdChange(this.value);" /> <label id="TrasholdLabel">Dens. trashold</label>
+            <input name="CuttingPlaneBar" type="range" id="cutPlaneSliderBar" min="0" max="300" step="0.1" value="10" onChange="cutPlaneDistanceChange(this.value);" /> <label id="CutPlaneLabel">Cut Plane distance</label>
         </div>
         
         <div id="output"></div>
@@ -52,13 +53,28 @@
 
             function setOpacity(opacity) {
                 alphaMul = opacity * alphaMulOneP;
-                setShader();
+                //setShader();
+                animate();
+            }
+
+            function makeAnimate() {
+                animate();
             }
 
             function trasholdChange(density) {
                 intensityT = density / 100.;
-                document.getElementById('TrasholdLabel').innerHTML = intensityT;
-                setShader();
+                document.getElementById('TrasholdLabel').innerHTML = intensityT.toFixed(2);
+                //setShader();
+                animate();
+            }
+
+            function cutPlaneDistanceChange(distance) {
+                var cutPlaneDistance = distance / 100.;
+                camera.near = cutPlaneDistance;
+                camera.updateProjectionMatrix();
+                document.getElementById('CutPlaneLabel').innerHTML = cutPlaneDistance.toFixed(2);
+                //setShader();
+                animate();
             }
 
             function setBackground(cb) {
@@ -80,29 +96,33 @@
                     volumeCube.material = returnMaterialVolumeMip();
                 else if (type == "iso")
                     volumeCube.material = returnMaterialVolumeIso();
-                animate();
+                //animate();
             }
 
             function setLUT(lutNo) {
                 if (lutNo == "1")
                     lutTexture = loader.load("lut/myLut1.png", function myfunction(texture) {
                         lutTexture = texture;
-                        setShader();
+                        //setShader();
+                        animate();
                     });
                 else if (lutNo == "2")
                     lutTexture = loader.load("lut/myLut2.png", function myfunction(texture) {
                         lutTexture = texture;
-                        setShader();
+                        //setShader();
+                        animate();
                     });
                 else if (lutNo == "3")
                     lutTexture = loader.load("lut/myLut3.png", function myfunction(texture) {
                         lutTexture = texture;
-                        setShader();
+                        //setShader();
+                        animate();
                     });
                 else if (lutNo == "4")
                     lutTexture = loader.load("lut/myLut4.png", function myfunction(texture) {
                         lutTexture = texture;
-                        setShader();
+                        //setShader();
+                        animate();
                     });
             }
 
@@ -119,7 +139,8 @@
                     volumeTexture = torsoTexture;
                     sizeInZ = 0.0028;
                 }
-                setShader();
+                //setShader();
+                animate();
             }
 
             function changeQuality(settNo) {
@@ -160,6 +181,7 @@
         <script src="./js/three.js"></script>
         <script src="./js/OrbitControls.js"></script>
         <script src="./DataProcessing.js"></script>
+        <script src="./CutPlane.js"></script>
 
         <!-- Shaders -->
         <script type="x-shader/x-vertex" id="vertexshader">
@@ -318,11 +340,12 @@
             uniform float step;
             uniform float zSize;
             uniform float texelSize;
+            uniform vec3 lightPos;
 
             const float SpecularContribution = 0.0;
             const float DiffuseContribution = 1.0 - SpecularContribution;
-            const vec3 lightPos = vec3(10., -10., -10.);
-            //const vec3 lightPos = vec3(0., 0., 1.);
+            
+            //vec3 lightPos = vec3(10., -10., -10.);
             
             float zCount;
 
@@ -397,7 +420,7 @@
                 //float diffuse = max(dot(lightVec, normal), 0.3);
 
                 vec3 lightVec = normalize(lightPos - actualPos);
-                float diffuse = clamp(dot(lightVec, normal), 0., 1.);
+                float diffuse = clamp(dot(lightVec, normal), 0.2, 1.);
                 
                 //Aj odraz  
                 //vec3 viewVec = direction;
@@ -630,10 +653,11 @@
             uniform float texelSize;
             
             uniform float intensityTreshold;
+            uniform vec3 lightPos;
 
             const float SpecularContribution = 0.0;
             const float DiffuseContribution = 1.0 - SpecularContribution;
-            const vec3 lightPos = vec3(10., -10., -10.);
+            //const vec3 lightPos = vec3(10., -10., -10.);
             
             float zCount;
 
@@ -728,7 +752,7 @@
 
             float getLightIntensity(vec3 actualPos, vec3 normal){
                 vec3 lightVec = normalize(lightPos - actualPos);
-                float diffuse = clamp(dot(lightVec, normal), 0., 1.);
+                float diffuse = clamp(dot(lightVec, normal), 0.2, 1.);
                 
                 //vec3 lightVec = normalize(lightPos - actualPos);
                 //float diffuse = max(dot(lightVec, normal), 0.3);
@@ -833,7 +857,8 @@
                     canvas.addEventListener(mousewheelevt, zoomSceneRedraw, false)
 
                 function zoomSceneRedraw(e) {
-                    animate();
+                    startLoop(true);
+                    startLoop(false);
                 }
             }
         </script>
@@ -843,10 +868,14 @@
 
             var scene, frontScene, backScene;
             var camera, renderer, backRenderer, frontRenderer;
+            var controls;
             var WIDTH,
                 HEIGHT;
             var gl;
             var volumeCube;
+            var cuttingPlane;
+            var planeObject, rayPlaneObject;
+
             var sizeOfTexture = 4096;
             var sizeOfImage = 256;
             var rayCastStep = 0.0015;
@@ -912,8 +941,7 @@
                   .1,         // Near
                   10000       // Far
                 );
-                camera.position.set(0, 0, 2);
-                camera.lookAt(new THREE.Vector3(0, 0, 0));
+                camera.position.set(2, 2, 2);
                 frontScene.add(camera);
                 backScene.add(camera);
                 scene.add(camera);
@@ -929,6 +957,8 @@
                 renderer.setClearColor(0x000000, 0);
                 // Add OrbitControls so that we can pan around with the mouse.
                 controls = new THREE.OrbitControls(camera, renderer.domElement);
+                //Nastavi pohlad kamery do stredu kocky
+                controls.target.set(0.5, 0.5, 0.5);
 
                 //LUT image
                 loader = new THREE.TextureLoader()
@@ -942,33 +972,59 @@
                 //volumeTexture = new THREE.Texture();
                 //changeQuality("2");
 
+                //Trieda na cutting plane
+                cuttingPlane = new CutPlane(camera, controls);
+
                 //Create cube
                 var frontCube = baseFrontCube(createCubeGeometry());
                 var backCube = baseBackCube(createCubeGeometry());
                 frontScene.add(frontCube);
                 backScene.add(backCube);
 
-                frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.FloatType });
-                backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.FloatType });
+                frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.HalfFloatType });
+                backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.HalfFloatType });
 
                 volumeCube = rayCube(createCubeGeometry(), sideImgCount);
                 //scene.add(frontCube);
                 scene.add(volumeCube);
+
+                //var planeGeometry = cuttingPlane.cutBox();
+                //planeObject = baseFrontCube(planeGeometry);
+                //scene.add(planeObject);
             }
+
 
             function createCubeGeometry() {
                 //load geometry
                 var cubeGeometry = new THREE.Geometry();
 
                 //add vertices
-                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, -0.5, 0.5));//0
-                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, 0.5, 0.5));//1
-                cubeGeometry.vertices.push(new THREE.Vector3(0.5, 0.5, 0.5));//2
-                cubeGeometry.vertices.push(new THREE.Vector3(0.5, -0.5, 0.5));//3
-                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, -0.5, -0.5));//4
-                cubeGeometry.vertices.push(new THREE.Vector3(-0.5, 0.5, -0.5));//5
-                cubeGeometry.vertices.push(new THREE.Vector3(0.5, 0.5, -0.5));//6
-                cubeGeometry.vertices.push(new THREE.Vector3(0.5, -0.5, -0.5));//7
+                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 0.0, 1.0));//0
+                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 1.0, 1.0));//1
+                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 1.0, 1.0));//2
+                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 0.0, 1.0));//3
+                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 0.0, 0.0));//4
+                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 1.0, 0.0));//5
+                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 1.0, 0.0));//6
+                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 0.0, 0.0));//7
+
+                cuttingPlane.setLines([]);
+                //hrany kocky, pre testovanie prienikov
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[0], cubeGeometry.vertices[1]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[1], cubeGeometry.vertices[2]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[2], cubeGeometry.vertices[3]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[3], cubeGeometry.vertices[0]));
+
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[0], cubeGeometry.vertices[4]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[1], cubeGeometry.vertices[5]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[2], cubeGeometry.vertices[6]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[3], cubeGeometry.vertices[7]));
+
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[4], cubeGeometry.vertices[5]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[5], cubeGeometry.vertices[6]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[6], cubeGeometry.vertices[7]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[7], cubeGeometry.vertices[4]));
+                //cuttingPlane.addLine(new THREE.Line3(new THREE.Vector3(0, 50, 0), new THREE.Vector3(0, -50, 0)));
 
                 //front
                 cubeGeometry.faces.push(new THREE.Face3(0, 2, 1));
@@ -1047,7 +1103,17 @@
             }
 
             function rayCube(cubeGeometry, imagesOnSide) {
-                var shaderMaterial = returnMaterialVolumeXray();
+                var e = document.getElementById("ShaderType");
+                var type = e.options[e.selectedIndex].value;
+
+                if (type == "render")
+                    shaderMaterial = returnMaterialVolumeLUT();
+                else if (type == "xray")
+                    shaderMaterial = returnMaterialVolumeXray();
+                else if (type == "mip")
+                    shaderMaterial = returnMaterialVolumeMip();
+                else if (type == "iso")
+                    shaderMaterial = returnMaterialVolumeIso();
 
                 return new THREE.Mesh(cubeGeometry, shaderMaterial);
             }
@@ -1068,6 +1134,7 @@
                 };
                 var shaderMaterial =
                 new THREE.ShaderMaterial({
+                    side: THREE.DoubleSide,
                     uniforms: baseUniforms,
                     vertexShader: document.getElementById('vertexshader').innerHTML,
                     fragmentShader: document.getElementById('xrayfshader').innerHTML
@@ -1090,11 +1157,13 @@
                     cntInRow: { type: "i", value: sideImgCount },
                     step: { type: "f", value: rayCastStep },
                     zSize: { type: "f", value: sizeInZ },
-                    texelSize: { type: "f", value: 1. / sizeOfTexture }
+                    texelSize: { type: "f", value: 1. / sizeOfTexture },
+                    lightPos: { type: "v3", value: camera.position.clone().negate() }
                 };
 
                 var shaderMaterial =
                 new THREE.ShaderMaterial({
+                    side: THREE.DoubleSide,
                     uniforms: uniforms,
                     vertexShader: document.getElementById('vertexshader').innerHTML,
                     fragmentShader: document.getElementById('lutfshader').innerHTML
@@ -1119,6 +1188,7 @@
                 };
                 var shaderMaterial =
                 new THREE.ShaderMaterial({
+                    side: THREE.DoubleSide,
                     uniforms: baseUniforms,
                     vertexShader: document.getElementById('vertexshader').innerHTML,
                     fragmentShader: document.getElementById('mipfshader').innerHTML
@@ -1143,10 +1213,12 @@
                     textureSide: { type: "i", value: sizeOfTexture },
                     texelSize: { type: "f", value: 1. / sizeOfTexture },
                     intensityTreshold: { type: "f", value: intensityT },
+                    lightPos: { type: "v3", value: camera.position.clone().negate() }
                 }; 
 
                 var shaderMaterial =
                 new THREE.ShaderMaterial({
+                    side: THREE.DoubleSide,
                     uniforms: baseUniforms,
                     vertexShader: document.getElementById('vertexshader').innerHTML,
                     fragmentShader: document.getElementById('isofshader').innerHTML
@@ -1161,7 +1233,31 @@
                 if (isRunning)
                     requestAnimationFrame(animate);
 
+                //Vypocet cutting plane
+                var planeGeometry = cuttingPlane.cutBox();
+                var newPlaneObject = baseFrontCube(planeGeometry);
+                var newRayPlaneObject = rayCube(planeGeometry);
+
+
+                //zmazanie cutting plane
+                if (planeObject != undefined) {
+                    frontScene.remove(planeObject);
+                    //scene.remove(planeObject);
+                    scene.remove(rayPlaneObject);
+                }
+                planeObject = newPlaneObject;
+                rayPlaneObject = newRayPlaneObject;
+                //pridanie noveho cutting plane
+                if (planeObject != undefined) {
+                    frontScene.add(planeObject);
+                    //scene.add(planeObject);
+                    scene.add(rayPlaneObject);
+                }
+
+
                 controls.update();
+
+                setShader();
 
                 // Render front cube.
                 renderer.render(frontScene, camera, frontTexture, true);
@@ -1169,6 +1265,7 @@
                 // Render back cube.
                 renderer.render(backScene, camera, backTexture, true);
                 //backTexture.texture.anisotropy = renderer.getMaxAnisotropy();
+                //renderer.clear(true, true, true);
 
                 renderer.render(scene, camera);
             }

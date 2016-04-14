@@ -1,6 +1,7 @@
 // JavaScript source code
 var maxTextures = 4;
-var examplesCount = 3;
+const maxImageValue = 255;
+//var examplesCount = 3;
 
 function preprocessData(pathDir, count, dataSetIndex) {
     var imageSize;
@@ -35,11 +36,6 @@ function preprocessData(pathDir, count, dataSetIndex) {
 
         //create texture
         var tx = new THREE.Texture(canvas);
-        //tx.magFilter = THREE.NearestFilter;
-        //tx.minFilter = THREE.NearestFilter;
-        //tx.magFilter = THREE.LinearFilter;
-        //tx.minFilter = THREE.LinearFilter;
-        //tx.anisotropy = renderer.getMaxAnisotropy();
         texture.push(tx);
     }
 
@@ -59,9 +55,6 @@ function preprocessData(pathDir, count, dataSetIndex) {
         names = getFileNames(pathDir, count);
         imagesCount = names.length;
         loadImage(names, 0);
-    }
-    
-    function makeTextures() {
     }
 
     function loadImage(names, i) {
@@ -255,7 +248,89 @@ function preprocessData(pathDir, count, dataSetIndex) {
     return texture;
 }
 
+function UndersampleDataset(dataSetIndex, sizeInZ, maxSize, maxCount) {
+    //pomocne premenne pre simulovanie 3D textury
+    //imgDataIndex je index do dat obrazku(musi sa nasobit 4 -> rgba)
+    var imgDataIndex, x, y = 0;
 
+    //Vysledne pole prvy prvok min hodnota druha max hodnota
+    var undersampled_A = [];
+    //index v poli undersampled_A
+    var usIndex = 0;
+
+    //Data obrazkov
+    var imageData_A = [];
+
+    //maximalny pocet obrazkov
+    var maxImagesInTexture = Math.pow(maxSide / side, 2);
+    var maxImages = maxImagesInTexture * maxTextures;
+
+    //rozmer tvoreneho podvzorkovaneho setu
+    var undersampledSize = sizeOfImage / 8;
+    if(undersampledSize < 2)
+        undersampledSize = 2;
+    //rozmer voxelov v novom podsamplovanom
+    var dimInUndersampled = sizeOfImage/undersampledSize;
+    
+    //inicializacia pola
+    for (var i = 0; i < Math.pow(undersampledSize, 3); i++) {
+        undersampled_A.push(0);
+        undersampled_A.push(maxImageValue);
+    }
+
+    //Krok v indexe textur po ktorom by mal ist bunka podvzorkovaneho datasetu
+    var step = (maxSize/sizeInZ)/undersampledSize;
+
+    var actualPosition = step;
+    var startIndex = 0;
+    var stopIndex = Math.ceil(step);
+    for (var actualPosition = 0; actualPosition < 1; ) {
+        x, y = 0;
+        //Ulozenie dat spracovanych obrazkov
+        for (var i = startIndex; i <= stopIndex && i < maxImages; i += 3) {
+            imageData_A.push(dataImages[dataSetIndex][i].getContext("2d").getImageData(0, 0, imageSize, imageSize));
+        }
+        //pocet obrazkov ktore budem spracuvat
+        var imagesCount = Math.min(stopIndex - startIndex + 1, maxImages - startIndex);
+
+        //counter - xii
+        var xii = 0;
+        //Zapisovanie informacii
+        for (var i = 0; i < imageData_A[0].data.length; i += 4) {
+            for (var imageX = 0; imageX < imagesCount; imageX++) {
+                if(undersampled_A[usIndex] > imageData_A[imageX].data[i+1])
+                    undersampled_A[usIndex] = imageData_A[imageX].data[i+1];
+                if(undersampled_A[usIndex+1] < imageData_A[imageX].data[i+1])
+                    undersampled_A[usIndex+1] = imageData_A[imageX].data[i+1];
+            }
+
+            //vypocet indexu
+            //Ak sa meni hodnota v X
+            if (xii == dimInUndersampled) {
+                x++;
+                //Ak sa meni hodnota v Y
+                if (x == undersampledSize) {
+                    y++;
+                    //Vynulovanie ak sa presla cela plocha
+                    //vtedy by sa malo vyskocit
+                    if (y == undersampledSize)
+                        x, y = 0;
+                }
+
+                usIndex = (y * undersampledSize + x) * 2;
+                xii = 0;
+            }
+            xii++;
+        }
+
+        //nastavenie pre posunutie v Z osi
+        actualPosition += step;
+        startIndex = Math.floor(actualPosition);
+        stopIndex = Math.ceil(actualPosition + step)
+    }
+
+    return undersampled_A;
+}
 
 
 
