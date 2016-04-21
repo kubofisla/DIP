@@ -67,17 +67,17 @@
             //Vlozi prvy bod
             SortedIntersections.push(Intersections.shift());
             //Cykli kym v poli nejake body zostali
-            for (; Intersections.length > 0;) {
+            for (var stopper; Intersections.length > 0 || stopper > 50; stopper++) {
                 var lastIntersect = SortedIntersections[SortedIntersections.length - 1];
                 //Prehladava ostatne body
                 for (var i = 0; i < Intersections.length; i++) {
                     //ak maju spolocnu hranu s poslednym tak je to nasledujuci bod
-                    if( (Intersections[i].x == 0.0 && lastIntersect.x == 0.0) || 
-                        (Intersections[i].y == 0.0 && lastIntersect.y == 0.0) ||
-                        (Intersections[i].z == 0.0 && lastIntersect.z == 0.0) ||
-                        (Intersections[i].x == 1.0 && lastIntersect.x == 1.0) ||
-                        (Intersections[i].y == 1.0 && lastIntersect.y == 1.0) ||
-                        (Intersections[i].z == 1.0 && lastIntersect.z == 1.0))
+                    if( (Intersections[i].x == 0 && lastIntersect.x == 0) || 
+                        (Intersections[i].y == 0 && lastIntersect.y == 0) ||
+                        (Intersections[i].z == 0 && lastIntersect.z == 0) ||
+                        (Intersections[i].x == 1 && lastIntersect.x == 1) ||
+                        (Intersections[i].y == 1 && lastIntersect.y == 1) ||
+                        (Intersections[i].z == 1 && lastIntersect.z == 1))
                     {
                         SortedIntersections.push(Intersections[i]);
                         Intersections.splice(i, 1);

@@ -11,9 +11,9 @@
         <div style="text-align: center; display:block;">
             <select style="display:table-cell;
                 vertical-align:middle; margin:auto;" id="DateSetSelect" onchange="setDataset(this.value)">
-                <option value="2">Hlava</option>
+                <option value="0">Hlava</option>
                 <option value="1">Ladviny</option>
-                <option value="3">Torso</option>
+                <option value="2">Torso</option>
                 <!--<option value="4">Light hard tissue</option>-->
             </select>
             <select style="display:table-cell;
@@ -24,7 +24,7 @@
                 <option value="3">Hard tissue</option>
             </select>
             <select style="display:table-cell;
-                vertical-align:middle; margin:auto;" id="ShaderType" onchange="makeAnimate()"> <!--onchange="setShader()">-->
+                vertical-align:middle; margin:auto;" id="ShaderType" onchange="makeAnimate()">
                 <option value="xray">X-Ray</option>
                 <option value="render">Render</option>
                 <option value="mip">MIP</option>
@@ -53,7 +53,6 @@
 
             function setOpacity(opacity) {
                 alphaMul = opacity * alphaMulOneP;
-                //setShader();
                 animate();
             }
 
@@ -64,7 +63,6 @@
             function trasholdChange(density) {
                 intensityT = density / 100.;
                 document.getElementById('TrasholdLabel').innerHTML = intensityT.toFixed(2);
-                //setShader();
                 animate();
             }
 
@@ -73,7 +71,6 @@
                 camera.near = cutPlaneDistance;
                 camera.updateProjectionMatrix();
                 document.getElementById('CutPlaneLabel').innerHTML = cutPlaneDistance.toFixed(2);
-                //setShader();
                 animate();
             }
 
@@ -96,50 +93,44 @@
                     volumeCube.material = returnMaterialVolumeMip();
                 else if (type == "iso")
                     volumeCube.material = returnMaterialVolumeIso();
-                //animate();
             }
 
             function setLUT(lutNo) {
                 if (lutNo == "1")
                     lutTexture = loader.load("lut/myLut1.png", function myfunction(texture) {
                         lutTexture = texture;
-                        //setShader();
                         animate();
                     });
                 else if (lutNo == "2")
                     lutTexture = loader.load("lut/myLut2.png", function myfunction(texture) {
                         lutTexture = texture;
-                        //setShader();
                         animate();
                     });
                 else if (lutNo == "3")
                     lutTexture = loader.load("lut/myLut3.png", function myfunction(texture) {
                         lutTexture = texture;
-                        //setShader();
                         animate();
                     });
                 else if (lutNo == "4")
                     lutTexture = loader.load("lut/myLut4.png", function myfunction(texture) {
                         lutTexture = texture;
-                        //setShader();
                         animate();
                     });
             }
 
             function setDataset(dsNo) {
-                if (dsNo == "1") {
-                    volumeTexture = oblickyTexture;
-                    sizeInZ = 0.002;
-                }
-                else if (dsNo == "2") {
+                if (dsNo == 0) {
                     volumeTexture = hlavaTexture;
                     sizeInZ = 0.007;
                 }
-                else if (dsNo == "3") {
+                else if (dsNo == 1) {
+                    volumeTexture = oblickyTexture;
+                    sizeInZ = 0.002;
+                }
+                else if (dsNo == 2) {
                     volumeTexture = torsoTexture;
                     sizeInZ = 0.0028;
                 }
-                //setShader();
                 animate();
             }
 
@@ -182,6 +173,7 @@
         <script src="./js/OrbitControls.js"></script>
         <script src="./DataProcessing.js"></script>
         <script src="./CutPlane.js"></script>
+        <script src="./MeshObject.js"></script>
 
         <!-- Shaders -->
         <script type="x-shader/x-vertex" id="vertexshader">
@@ -752,7 +744,8 @@
 
             float getLightIntensity(vec3 actualPos, vec3 normal){
                 vec3 lightVec = normalize(lightPos - actualPos);
-                float diffuse = clamp(dot(lightVec, normal), 0.2, 1.);
+                float diffuse = clamp(dot(normal, lightVec), 0.2, 1.);
+                //float diffuse = clamp(dot(lightVec, normal), 0.2, 1.);
                 
                 //vec3 lightVec = normalize(lightPos - actualPos);
                 //float diffuse = max(dot(lightVec, normal), 0.3);
@@ -864,7 +857,15 @@
         </script>
 
         <script>
+            //KONSTANTA, pocet obrazkov ktore bude dokreslovat
+            var postFrameCount = 1;
+            var c_boxSize = 1.;
+            //cislo akutalneho obrazku dokreslenia
+            var actualPostFrame = 0;
+
             var isRunning = false;
+
+            var frontCube, backCube;
 
             var scene, frontScene, backScene;
             var camera, renderer, backRenderer, frontRenderer;
@@ -875,6 +876,9 @@
             var volumeCube;
             var cuttingPlane;
             var planeObject, rayPlaneObject;
+
+            var coordBoxesArray = [];
+            var undersampledData = new Array(3);
 
             var sizeOfTexture = 4096;
             var sizeOfImage = 256;
@@ -969,22 +973,26 @@
                 oblickyTexture = preprocessData("volumes/SET1/",  361, 1);
                 torsoTexture = preprocessData("volumes/TORSO/",  394, 2);
                 volumeTexture = hlavaTexture;
-                //volumeTexture = new THREE.Texture();
-                //changeQuality("2");
 
                 //Trieda na cutting plane
                 cuttingPlane = new CutPlane(camera, controls);
 
                 //Create cube
-                var frontCube = baseFrontCube(createCubeGeometry());
-                var backCube = baseBackCube(createCubeGeometry());
+                frontCube = baseFrontCube(jsCubeGeometry(0, 0, 1, c_boxSize));
+                backCube = baseBackCube(jsCubeGeometry(0, 0, 1, c_boxSize));
                 frontScene.add(frontCube);
+                backScene.add(jsBlackCube(0, 0, 1, c_boxSize));
                 backScene.add(backCube);
+                //scene.add(jsBlackCube(0, 0, 1, c_boxSize));
 
                 frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.HalfFloatType });
                 backTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.HalfFloatType });
 
-                volumeCube = rayCube(createCubeGeometry(), sideImgCount);
+                //create volume cube
+                var cubeGeom = jsCubeGeometry(0, 0, 1, c_boxSize);
+                setCuttingPlaneLines(cubeGeom);
+                volumeCube = rayCube(cubeGeom);
+
                 //scene.add(frontCube);
                 scene.add(volumeCube);
 
@@ -993,93 +1001,164 @@
                 //scene.add(planeObject);
             }
 
+            function addFrontCubes(datasetIndex) {
+                var cubeSize = c_boxSize / undersampledSize;
+                var it = 0;
 
-            function createCubeGeometry() {
-                //load geometry
+                for (var z = 1.; z > 0.; z -= cubeSize) {
+                    for (var y = 1. - cubeSize; y >= 0.; y -= cubeSize) {
+                        for (var x = 0.; x < 1.; x += cubeSize) {
+                            if (undersampledData[datasetIndex][it + 1] > 0) {
+                                frontScene.add(baseFrontCube(jsCubeGeometry(x, y, z, cubeSize)));
+                                backScene.add(baseBackCube(jsCubeGeometry(x, y, z, cubeSize)));
+                                //scene.add(baseBackCube(jsCubeGeometry(x, y, z, cubeSize)));
+                            }
+                            it += 2;
+                        }
+                    }
+                }
+
+                frontScene.remove(frontCube);
+                backScene.remove(backCube);
+            }
+
+            function SetCubeOrder(cameraPosition) {
+                //Vyhladavacie pole
+                var sortArray = [];
+
+                //Vlozenie boxov z backsceny
+                //for (var i = 0; i < backScene.children.length; i++) {
+                //    if (!(backScene.children[i] instanceof THREE.Mesh))
+                //        continue;
+                    //objekt s vzdialenostov
+                    //var sortObj = new MeshObject(backScene.children[i], 0);
+                for (var i = 0; i < scene.children.length; ) {
+                    if (!(scene.children[i] instanceof THREE.Mesh)) {
+                        i++;
+                        continue;
+                    }
+                    var sortObj = new MeshObject(scene.children[i], 0);
+                    //nastavenie vzdialenosti ku kamere
+                    sortObj.SetDistance(cameraPosition);
+                    sortArray.push(sortObj);
+                    scene.remove(sortObj.SceneObject);
+                }
+
+                //zoradenie pola
+                sortArray.sort(function (a, b) {
+                    return a.Distance - b.Distance;
+                });
+                //nastavenie poradia
+                for (var i = 0; i < sortArray.length; i++) {
+                    scene.add(sortArray[i].SceneObject);
+                    //sortArray[i].SceneObject.renderOrder = i;
+                }
+            }
+
+            function createCubeGeometry(x, y, z, cubeOffset) {
                 var cubeGeometry = new THREE.Geometry();
 
-                //add vertices
-                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 0.0, 1.0));//0
-                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 1.0, 1.0));//1
-                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 1.0, 1.0));//2
-                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 0.0, 1.0));//3
-                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 0.0, 0.0));//4
-                cubeGeometry.vertices.push(new THREE.Vector3(0.0, 1.0, 0.0));//5
-                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 1.0, 0.0));//6
-                cubeGeometry.vertices.push(new THREE.Vector3(1.0, 0.0, 0.0));//7
+                var xO = 0;
+                var yO = 0;
+                var zO = 0;
 
-                cuttingPlane.setLines([]);
-                //hrany kocky, pre testovanie prienikov
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[0], cubeGeometry.vertices[1]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[1], cubeGeometry.vertices[2]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[2], cubeGeometry.vertices[3]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[3], cubeGeometry.vertices[0]));
+                //Vlozenie vrcholov
+                for (var i = 0; i < 8; i++) {
+                    cubeGeometry.vertices.push(new THREE.Vector3(x + xO, y + yO, z + zO));
+                    //prestavenie honot
+                    if (i == 0 || i == 4) yO = cubeOffset;
+                    else if (i == 1 || i == 5) xO = cubeOffset;
+                    else if (i == 2 || i == 6) yO = 0;
+                    else if (i == 3) { xO = 0; yO = 0; zO = 0; }
+                }
 
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[0], cubeGeometry.vertices[4]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[1], cubeGeometry.vertices[5]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[2], cubeGeometry.vertices[6]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[3], cubeGeometry.vertices[7]));
-
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[4], cubeGeometry.vertices[5]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[5], cubeGeometry.vertices[6]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[6], cubeGeometry.vertices[7]));
-                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[7], cubeGeometry.vertices[4]));
-                //cuttingPlane.addLine(new THREE.Line3(new THREE.Vector3(0, 50, 0), new THREE.Vector3(0, -50, 0)));
+                //Nastavenie farieb
+                for (var i = 0; i < 8; i++) {
+                    cubeGeometry.colors.push(new THREE.Color(cubeGeometry.vertices[i].x, cubeGeometry.vertices[i].y, 1 - cubeGeometry.vertices[i].z));
+                }
 
                 //front
                 cubeGeometry.faces.push(new THREE.Face3(0, 2, 1));
-                cubeGeometry.faces[0].vertexColors[0] = new THREE.Color(0, 0, 0);
-                cubeGeometry.faces[0].vertexColors[1] = new THREE.Color(1, 1, 0);
-                cubeGeometry.faces[0].vertexColors[2] = new THREE.Color(0, 1, 0);
                 cubeGeometry.faces.push(new THREE.Face3(0, 3, 2));
-                cubeGeometry.faces[1].vertexColors[0] = new THREE.Color(0, 0, 0);
-                cubeGeometry.faces[1].vertexColors[1] = new THREE.Color(1, 0, 0);
-                cubeGeometry.faces[1].vertexColors[2] = new THREE.Color(1, 1, 0);
                 //bot
                 cubeGeometry.faces.push(new THREE.Face3(0, 1, 4));
-                cubeGeometry.faces[2].vertexColors[0] = new THREE.Color(0, 0, 0);
-                cubeGeometry.faces[2].vertexColors[1] = new THREE.Color(0, 1, 0);
-                cubeGeometry.faces[2].vertexColors[2] = new THREE.Color(0, 0, 1);
                 cubeGeometry.faces.push(new THREE.Face3(1, 5, 4));
-                cubeGeometry.faces[3].vertexColors[0] = new THREE.Color(0, 1, 0);
-                cubeGeometry.faces[3].vertexColors[1] = new THREE.Color(0, 1, 1);
-                cubeGeometry.faces[3].vertexColors[2] = new THREE.Color(0, 0, 1);
                 //top
                 cubeGeometry.faces.push(new THREE.Face3(2, 7, 6));
-                cubeGeometry.faces[4].vertexColors[0] = new THREE.Color(1, 1, 0);
-                cubeGeometry.faces[4].vertexColors[1] = new THREE.Color(1, 0, 1);
-                cubeGeometry.faces[4].vertexColors[2] = new THREE.Color(1, 1, 1);
                 cubeGeometry.faces.push(new THREE.Face3(3, 7, 2));
-                cubeGeometry.faces[5].vertexColors[0] = new THREE.Color(1, 0, 0);
-                cubeGeometry.faces[5].vertexColors[1] = new THREE.Color(1, 0, 1);
-                cubeGeometry.faces[5].vertexColors[2] = new THREE.Color(1, 1, 0);
                 //left
                 cubeGeometry.faces.push(new THREE.Face3(0, 4, 7));
-                cubeGeometry.faces[6].vertexColors[0] = new THREE.Color(0, 0, 0);
-                cubeGeometry.faces[6].vertexColors[1] = new THREE.Color(0, 0, 1);
-                cubeGeometry.faces[6].vertexColors[2] = new THREE.Color(1, 0, 1);
                 cubeGeometry.faces.push(new THREE.Face3(0, 7, 3));
-                cubeGeometry.faces[7].vertexColors[0] = new THREE.Color(0, 0, 0);
-                cubeGeometry.faces[7].vertexColors[1] = new THREE.Color(1, 0, 1);
-                cubeGeometry.faces[7].vertexColors[2] = new THREE.Color(1, 0, 0);
                 //right
                 cubeGeometry.faces.push(new THREE.Face3(1, 6, 5));
-                cubeGeometry.faces[8].vertexColors[0] = new THREE.Color(0, 1, 0);
-                cubeGeometry.faces[8].vertexColors[1] = new THREE.Color(1, 1, 1);
-                cubeGeometry.faces[8].vertexColors[2] = new THREE.Color(0, 1, 1);
                 cubeGeometry.faces.push(new THREE.Face3(1, 2, 6));
-                cubeGeometry.faces[9].vertexColors[0] = new THREE.Color(0, 1, 0);
-                cubeGeometry.faces[9].vertexColors[1] = new THREE.Color(1, 1, 0);
-                cubeGeometry.faces[9].vertexColors[2] = new THREE.Color(1, 1, 1);
                 //back
                 cubeGeometry.faces.push(new THREE.Face3(5, 6, 7));
-                cubeGeometry.faces[10].vertexColors[0] = new THREE.Color(0, 1, 1);
-                cubeGeometry.faces[10].vertexColors[1] = new THREE.Color(1, 1, 1);
-                cubeGeometry.faces[10].vertexColors[2] = new THREE.Color(1, 0, 1);
                 cubeGeometry.faces.push(new THREE.Face3(5, 7, 4));
-                cubeGeometry.faces[11].vertexColors[0] = new THREE.Color(0, 1, 1);
-                cubeGeometry.faces[11].vertexColors[1] = new THREE.Color(1, 0, 1);
-                cubeGeometry.faces[11].vertexColors[2] = new THREE.Color(0, 0, 1);
+            }
+
+            //http://stackoverflow.com/questions/10330342/threejs-assign-different-colors-to-each-vertex-in-a-geometry
+            //Tvorba kocky pomocou Box geometry
+            function jsCubeGeometry(x, y, z, size) {
+                var face, numberOfSides, vertexIndex;
+                var faceIndices = ['a', 'b', 'c', 'd'];
+
+                //load geometry
+                var cubeGeometry = new THREE.BoxGeometry(size, size, size);
+                cubeGeometry = cubeGeometry.translate(x + size / 2, y + size / 2, z - size / 2);
+
+                //Nastavenie farieb
+                for (var i = 0; i < 8; i++) {
+                    cubeGeometry.colors.push(new THREE.Color(cubeGeometry.vertices[i].x, cubeGeometry.vertices[i].y, 1 - cubeGeometry.vertices[i].z));
+                }
+
+                //nastavenie face colors
+                for (var i = 0; i < cubeGeometry.faces.length; i++) {
+                    face = cubeGeometry.faces[i];
+                    numberOfSides = (face instanceof THREE.Face3) ? 3 : 4;
+                    for (var j = 0; j < numberOfSides; j++) {
+                        vertexIndex = face[faceIndices[j]];
+                        face.vertexColors[j] = cubeGeometry.colors[vertexIndex];
+                    }
+                }
+
+                return cubeGeometry;
+            }
+
+            //http://stackoverflow.com/questions/10330342/threejs-assign-different-colors-to-each-vertex-in-a-geometry
+            //Tvorba kocky pomocou Box geometry
+            function jsBlackCube(x, y, z, size) {
+                //load geometry
+                var cubeGeometry = new THREE.BoxGeometry(size, size, size);
+                cubeGeometry = cubeGeometry.translate(x + size / 2, y + size / 2, z - size / 2);
+
+                //load material
+                var cubeMaterial = new THREE.MeshBasicMaterial({
+                    side: THREE.FrontSide,
+                    color: 0x000000,
+                    depthFunc: THREE.LessDepth
+                });
+                
+                return new THREE.Mesh(cubeGeometry, cubeMaterial);
+            }
+
+            function setCuttingPlaneLines(cubeGeometry) {
+                cuttingPlane.setLines([]);
+                //hrany kocky, pre testovanie prienikov
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[0], cubeGeometry.vertices[1]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[1], cubeGeometry.vertices[3]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[3], cubeGeometry.vertices[2]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[2], cubeGeometry.vertices[0]));
+
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[0], cubeGeometry.vertices[5]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[1], cubeGeometry.vertices[4]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[2], cubeGeometry.vertices[7]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[3], cubeGeometry.vertices[6]));
+
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[4], cubeGeometry.vertices[5]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[5], cubeGeometry.vertices[7]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[7], cubeGeometry.vertices[6]));
+                cuttingPlane.addLine(new THREE.Line3(cubeGeometry.vertices[6], cubeGeometry.vertices[4]));
 
                 return cubeGeometry;
             }
@@ -1096,13 +1175,14 @@
             function baseBackCube(cubeGeometry) {
                 var cubeMaterial = new THREE.MeshBasicMaterial({
                     side: THREE.BackSide,
-                    vertexColors: THREE.VertexColors
+                    vertexColors: THREE.VertexColors,
+                    depthFunc: THREE.GreaterDepth
                 });
 
                 return new THREE.Mesh(cubeGeometry, cubeMaterial);
             }
 
-            function rayCube(cubeGeometry, imagesOnSide) {
+            function rayCube(cubeGeometry) {
                 var e = document.getElementById("ShaderType");
                 var type = e.options[e.selectedIndex].value;
 
@@ -1227,17 +1307,28 @@
                 return shaderMaterial;
             }
 
+            function recalculateSceneReverseOrder(scene) {
+
+            }
+
             function animate() {
 
                 // Read more about requestAnimationFrame at http://www.paulirish.com/2011/requestanimationframe-for-smart-animating/
                 if (isRunning)
                     requestAnimationFrame(animate);
+                else {
+                    actualPostFrame = 0;
+                    postAnimate();
+                }
 
+                animateCore();
+            }
+
+            function animateCore() {
                 //Vypocet cutting plane
                 var planeGeometry = cuttingPlane.cutBox();
                 var newPlaneObject = baseFrontCube(planeGeometry);
                 var newRayPlaneObject = rayCube(planeGeometry);
-
 
                 //zmazanie cutting plane
                 if (planeObject != undefined) {
@@ -1257,20 +1348,32 @@
 
                 controls.update();
 
-                setShader();
+                //setShader();
 
                 // Render front cube.
                 renderer.render(frontScene, camera, frontTexture, true);
                 //frontTexture.texture.anisotropy = renderer.getMaxAnisotropy();
                 // Render back cube.
+
+                //prepocitanie vykreslovania od vzdialenych kociek
+                //SetCubeOrder(camera.position);
                 renderer.render(backScene, camera, backTexture, true);
                 //backTexture.texture.anisotropy = renderer.getMaxAnisotropy();
                 //renderer.clear(true, true, true);
 
+                setShader();
+
+                //ray casting
                 renderer.render(scene, camera);
             }
 
+            function postAnimate() {
+                if (actualPostFrame < postFrameCount && !isRunning)
+                    requestAnimationFrame(postAnimate);
 
+                actualPostFrame++;
+                animateCore();
+            }
 
             function initWebGL(canvas) {
                 gl = null;

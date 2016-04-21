@@ -2,9 +2,10 @@
 var maxTextures = 4;
 const maxImageValue = 255;
 //var examplesCount = 3;
+var undersampledSize = 512;
+var imageSize;
 
 function preprocessData(pathDir, count, dataSetIndex) {
-    var imageSize;
 
     var maxSide = sizeOfTexture;
     var side = sizeOfImage;
@@ -45,6 +46,8 @@ function preprocessData(pathDir, count, dataSetIndex) {
         imageCounter = 0;
         names = getFileNames(pathDir, count);
         mergeData(names, 0, maxSide - side, texNum, dataSetIndex);
+        undersampledData[dataSetIndex] = UndersampleDataset(dataSetIndex, sizeInZ, 1.);
+        addFrontCubes(dataSetIndex);
     }
     else
         loadPostprocessImages();
@@ -64,6 +67,14 @@ function preprocessData(pathDir, count, dataSetIndex) {
             setOtherChanells();
             imageCounter = 0;
             mergeData(names, 0, maxSide - side, texNum, dataSetIndex);
+            undersampledData[dataSetIndex] = UndersampleDataset(dataSetIndex, sizeInZ, 1.);
+
+            //Zistenie aktualneho nastaveneho datasetu
+            var e = document.getElementById("DateSetSelect");
+            var type = e.options[e.selectedIndex].value;
+            //todo spravit event?
+            if (type == dataSetIndex)
+                addFrontCubes(dataSetIndex);
         }
         else
         {                          
@@ -248,10 +259,12 @@ function preprocessData(pathDir, count, dataSetIndex) {
     return texture;
 }
 
-function UndersampleDataset(dataSetIndex, sizeInZ, maxSize, maxCount) {
+function UndersampleDataset(dataSetIndex, sizeInZ, maxSize) {
+    var c_boxSize = 64;
+
     //pomocne premenne pre simulovanie 3D textury
     //imgDataIndex je index do dat obrazku(musi sa nasobit 4 -> rgba)
-    var imgDataIndex, x, y = 0;
+    var imgDataIndex = 0, x = 0, y = 0, z = 0;
 
     //Vysledne pole prvy prvok min hodnota druha max hodnota
     var undersampled_A = [];
@@ -262,42 +275,55 @@ function UndersampleDataset(dataSetIndex, sizeInZ, maxSize, maxCount) {
     var imageData_A = [];
 
     //maximalny pocet obrazkov
-    var maxImagesInTexture = Math.pow(maxSide / side, 2);
+    var maxImagesInTexture = Math.pow(sizeOfTexture / sizeOfImage, 2);
     var maxImages = maxImagesInTexture * maxTextures;
 
     //rozmer tvoreneho podvzorkovaneho setu
-    var undersampledSize = sizeOfImage / 8;
+    undersampledSize = imageSize / c_boxSize;
     if(undersampledSize < 2)
         undersampledSize = 2;
     //rozmer voxelov v novom podsamplovanom
-    var dimInUndersampled = sizeOfImage/undersampledSize;
+    var boxResolution = imageSize / undersampledSize;
     
     //inicializacia pola
-    for (var i = 0; i < Math.pow(undersampledSize, 3); i++) {
-        undersampled_A.push(0);
+    for (var i = 0; i < Math.pow(undersampledSize, 3) ; i++) {
+        //min
         undersampled_A.push(maxImageValue);
+        //max
+        undersampled_A.push(0);
     }
 
     //Krok v indexe textur po ktorom by mal ist bunka podvzorkovaneho datasetu
-    var step = (maxSize/sizeInZ)/undersampledSize;
+    //var step = (maxSize / ((maxSize / sizeInZ) / undersampledSize));
+    //var step = (maxSize * sizeInZ * undersampledSize);
+    var step = maxSize / undersampledSize;
+    var indexStep = step/sizeInZ;
 
     var actualPosition = step;
     var startIndex = 0;
-    var stopIndex = Math.ceil(step);
-    for (var actualPosition = 0; actualPosition < 1; ) {
-        x, y = 0;
+    var stopIndex = Math.ceil(indexStep);
+    x = 0, y = 0, z = 0;
+    for (var actualPosition = 0; actualPosition < 1 ;) {
+        imageData_A = [];
         //Ulozenie dat spracovanych obrazkov
-        for (var i = startIndex; i <= stopIndex && i < maxImages; i += 3) {
-            imageData_A.push(dataImages[dataSetIndex][i].getContext("2d").getImageData(0, 0, imageSize, imageSize));
+        for (var i = startIndex; dataImages[dataSetIndex][i] && i <= stopIndex ; i++) {
+            var context = dataImages[dataSetIndex][i].getContext("2d");
+            var imageData = context.getImageData(0, 0, imageSize, imageSize);
+            imageData_A.push(imageData);
         }
+        if (imageData_A.length == 0)
+            break;
+
+
         //pocet obrazkov ktore budem spracuvat
         var imagesCount = Math.min(stopIndex - startIndex + 1, maxImages - startIndex);
 
         //counter - xii
         var xii = 0;
+        var yii = 0;
         //Zapisovanie informacii
         for (var i = 0; i < imageData_A[0].data.length; i += 4) {
-            for (var imageX = 0; imageX < imagesCount; imageX++) {
+            for (var imageX = 0; imageX < imagesCount &&  imageData_A[imageX] ; imageX++) {
                 if(undersampled_A[usIndex] > imageData_A[imageX].data[i+1])
                     undersampled_A[usIndex] = imageData_A[imageX].data[i+1];
                 if(undersampled_A[usIndex+1] < imageData_A[imageX].data[i+1])
@@ -306,27 +332,33 @@ function UndersampleDataset(dataSetIndex, sizeInZ, maxSize, maxCount) {
 
             //vypocet indexu
             //Ak sa meni hodnota v X
-            if (xii == dimInUndersampled) {
+            xii++;
+            if (xii >= boxResolution) {
                 x++;
                 //Ak sa meni hodnota v Y
-                if (x == undersampledSize) {
-                    y++;
-                    //Vynulovanie ak sa presla cela plocha
-                    //vtedy by sa malo vyskocit
-                    if (y == undersampledSize)
-                        x, y = 0;
+                if (x >= undersampledSize) {
+                    yii++;
+                    if (yii >= boxResolution) {
+                        y++;
+                        //Vynulovanie ak sa presla cela plocha
+                        //vtedy by sa malo vyskocit
+                        if (y >= undersampledSize) {
+                            y = 0;
+                        }
+                        yii = 0;
+                    }
+                    x = 0;
                 }
-
-                usIndex = (y * undersampledSize + x) * 2;
                 xii = 0;
+                usIndex = (z * undersampledSize * undersampledSize + (y * undersampledSize + x)) * 2;
             }
-            xii++;
         }
 
         //nastavenie pre posunutie v Z osi
+        z++;
         actualPosition += step;
-        startIndex = Math.floor(actualPosition);
-        stopIndex = Math.ceil(actualPosition + step)
+        startIndex = Math.floor(indexStep * z);
+        stopIndex = Math.ceil(indexStep * z + indexStep);
     }
 
     return undersampled_A;
