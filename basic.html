@@ -36,10 +36,10 @@
                 <option value="2">Medium</option>
                 <option value="3">Low</option>
             </select>
-            <input name="OpacityBar" type="range" id="sliderBar" min="0" max="100" step="1" value="50" onChange="setOpacity(this.value);" />
-            <label><input type='checkbox' onclick='setBackground(this);'>Debug background</label>
-            <input name="TrasholdBar" type="range" id="sliderBar" min="0" max="100" step="1" value="5" onChange="trasholdChange(this.value);" /> <label id="TrasholdLabel">Dens. trashold</label>
-            <input name="CuttingPlaneBar" type="range" id="cutPlaneSliderBar" min="0" max="300" step="0.1" value="10" onChange="cutPlaneDistanceChange(this.value);" /> <label id="CutPlaneLabel">Cut Plane distance</label>
+            <input name="OpacityBar" type="range" id="sliderBar" min="0" max="100" step="1" value="50" onChange="setOpacity(this.value);" onInput="setOpacity(this.value);"/>
+            <label><input type='checkbox' onclick='setBackground(this);' onInput='setBackground(this);'>Debug background</label>
+            <input name="TrasholdBar" type="range" id="sliderBar" min="0" max="100" step="1" value="5" onChange="trasholdChange(this.value);" onInput="trasholdChange(this.value);"/> <label id="TrasholdLabel">Dens. trashold</label>
+            <input name="CuttingPlaneBar" type="range" id="cutPlaneSliderBar" min="0" max="300" step="0.1" value="10" onChange="cutPlaneDistanceChange(this.value);" onInput="cutPlaneDistanceChange(this.value);"/> <label id="CutPlaneLabel">Cut Plane distance</label>
         </div>
         
         <div id="output"></div>
@@ -51,9 +51,11 @@
             var alphaMul = 0.0013;
             var intensityT = 0.05;
 
+            javascript: (function () { var script = document.createElement('script'); script.onload = function () { var stats = new Stats(); document.body.appendChild(stats.dom); requestAnimationFrame(function loop() { stats.update(); requestAnimationFrame(loop) }); }; script.src = '//rawgit.com/mrdoob/stats.js/master/build/stats.min.js'; document.head.appendChild(script); })()
+
             function setOpacity(opacity) {
                 alphaMul = opacity * alphaMulOneP;
-                animate();
+                makeAnimate();
             }
 
             function makeAnimate() {
@@ -63,7 +65,7 @@
             function trasholdChange(density) {
                 intensityT = density / 100.;
                 document.getElementById('TrasholdLabel').innerHTML = intensityT.toFixed(2);
-                animate();
+                makeAnimate();
             }
 
             function cutPlaneDistanceChange(distance) {
@@ -71,7 +73,7 @@
                 camera.near = cutPlaneDistance;
                 camera.updateProjectionMatrix();
                 document.getElementById('CutPlaneLabel').innerHTML = cutPlaneDistance.toFixed(2);
-                animate();
+                makeAnimate();
             }
 
             function setBackground(cb) {
@@ -99,22 +101,22 @@
                 if (lutNo == "1")
                     lutTexture = loader.load("lut/myLut1.png", function myfunction(texture) {
                         lutTexture = texture;
-                        animate();
+                        makeAnimate();
                     });
                 else if (lutNo == "2")
                     lutTexture = loader.load("lut/myLut2.png", function myfunction(texture) {
                         lutTexture = texture;
-                        animate();
+                        makeAnimate();
                     });
                 else if (lutNo == "3")
                     lutTexture = loader.load("lut/myLut3.png", function myfunction(texture) {
                         lutTexture = texture;
-                        animate();
+                        makeAnimate();
                     });
                 else if (lutNo == "4")
                     lutTexture = loader.load("lut/myLut4.png", function myfunction(texture) {
                         lutTexture = texture;
-                        animate();
+                        makeAnimate();
                     });
             }
 
@@ -131,7 +133,9 @@
                     volumeTexture = torsoTexture;
                     sizeInZ = 0.0028;
                 }
-                animate();
+                refreshEmtySpaceSkipping(dsNo);
+
+                makeAnimate();
             }
 
             function changeQuality(settNo) {
@@ -169,669 +173,39 @@
             }
         </script>
 
+        <script src="./js/jquery-1.12.3.js"></script>
+        <script src="./js/Stats.js"></script>
         <script src="./js/three.js"></script>
         <script src="./js/OrbitControls.js"></script>
         <script src="./DataProcessing.js"></script>
         <script src="./CutPlane.js"></script>
-        <script src="./MeshObject.js"></script>
+        
 
         <!-- Shaders -->
-        <script type="x-shader/x-vertex" id="vertexshader">
+        <!-- Loading shader files -->
 
-            // switch on high precision floats
-
-            void main()
-            {
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-            }
-
+        <script id="vertex_shader" type="x-shader/x-vertex">
+        </script>
+        <script src="./shaders/fragmet_shader_xray.js" id="xray_fshader" type="x-shader/x-fragment">
+        </script>
+        <script src="./shaders/fragmet_shader_lut.js" id="lut_fshader" type="x-shader/x-fragment">
+        </script>
+        <script src="./shaders/fragmet_shader_mip.js" id="mip_fshader" type="x-shader/x-fragment">
+        </script>
+        <script src="./shaders/fragmet_shader_iso.js" id="iso_fshader" type="x-shader/x-fragment">
         </script>
 
-        <script type="x-shader/x-fragment" id="xrayfshader">
-
-            #ifdef GL_ES
-            precision highp float;
-            #endif
-
-            uniform sampler2D frontFace;
-            uniform sampler2D backFace;
-
-            uniform sampler2D volume1;
-            uniform sampler2D volume2;
-            uniform sampler2D volume3;
-            uniform sampler2D volume4;
-
-            uniform vec2 size;
-            uniform float alphaMultiplier;
-            uniform float step;
-            uniform int cntInRow;
-            uniform float zSize;
-            vec3 direction;
-
-            int textureIndex = 0;
-
-            vec2 mappingFce(vec3 position, int sideCnt){
-                float partSide = float(1) / float(sideCnt);
-
-                int imgCount = int(position.z * (float(1) / zSize));
-
-                int yMul = int(imgCount / sideCnt);
-                int xMul = int(imgCount - (yMul*sideCnt));
-
-                textureIndex = yMul/sideCnt;
-                yMul -= textureIndex*sideCnt;
-
-                float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
-                float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
-
-                return vec2(xPos, yPos);
+        <script>
+            function LoadShaders() {
+                $("#vertex_shader").load("./shaders/vertex_shader.js");
+                $("#xray_fshader").load("./shaders/fragmet_shader_xray.js");
+                $("#lut_fshader").load("./shaders/fragmet_shader_lut.js");
+                $("#mip_fshader").load("./shaders/fragmet_shader_mip.js");
+                $("#iso_fshader").load("./shaders/fragmet_shader_iso.js");
             }
-
-            vec4 getColor(vec2 pos){
-
-                if(textureIndex == 0)
-                   return texture2D(volume1, pos.xy);
-                if(textureIndex == 1)
-                    return texture2D(volume2, pos.xy);
-                if(textureIndex == 2)
-                    return texture2D(volume3, pos.xy);
-                if(textureIndex == 3)
-                    return texture2D(volume4, pos.xy);
-                
-                return vec4(0.);
-            }
-            
-            vec4 getFilteredColor(vec3 position, float partSide){
-                float zAxis = position.z * (float(1) / zSize);  
-                int imgIndex = int(zAxis);
-                
-                float colorDiff = zAxis - float(imgIndex);
-                float opositeColorDiff = 1. - colorDiff;
-
-                int yOffset = imgIndex / cntInRow;
-                //int xOffset = imgIndex - cntInRow * int(floor( float(imgIndex) / float(cntInRow) )); //modulo
-                int xOffset = int(mod(float(imgIndex), float(cntInRow)));
-
-                textureIndex = yOffset/cntInRow;
-                yOffset -= textureIndex*cntInRow;
-
-                float xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                float yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
-
-                vec4 color1 = getColor(vec2(xPos, yPos));
-
-                float interpoledColor = color1.g*opositeColorDiff + color1.b*colorDiff;
-
-                return vec4(interpoledColor,interpoledColor,interpoledColor,1.);
-            }
-
-            void main()
-            {
-                vec4 value;
-                vec4 result = vec4(0.0);
-
-                vec4 fragCoord = vec4(gl_FragCoord.xy/size, 0.0, 0.0);
-                vec3 frontPos = texture2D(frontFace, fragCoord.xy).rgb;
-                vec3 backPos = texture2D(backFace, fragCoord.xy).rgb;
-                vec3 path = backPos - frontPos;
-                direction = normalize(path);
-
-                vec3 actualPos = frontPos;
-
-                float partSide = float(1) / float(cntInRow);
-                float alfa = 0.0;
-
-                float rayDistance = length(path);
-                float actualDistance = 0.;
-
-                vec3 diff1 = direction * step;
-                float vDiff1 = length(diff1);
-
-                for (int i=0; i < 2000; i++) {
-
-                    if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
-                        break;
-
-                    value = getFilteredColor(actualPos.xyz, partSide);
-                    value.a = ((0.2126*value.r + 0.7152*value.g + 0.0722*value.b)*alphaMultiplier);
-                    alfa += value.g * alphaMultiplier;
-                    if(alfa >= 0.99)
-                    {
-                        alfa = 1.0;
-                        break;
-                    }
-    
-                    actualPos += diff1;
-                    actualDistance += vDiff1;
-                }
-
-                gl_FragColor=vec4(vec3(1.0,1.0,1.0)*alfa, 1.0);
-            }
-
         </script>
 
-        <script type="x-shader/x-fragment" id="lutfshader">
-
-            #ifdef GL_ES
-            precision highp float;
-            #endif
-
-            uniform sampler2D frontFace;
-            uniform sampler2D backFace;
-
-            uniform sampler2D volume1;
-            uniform sampler2D volume2;
-            uniform sampler2D volume3;
-            uniform sampler2D volume4;
-
-            uniform sampler2D transferFce;
-
-            uniform vec2 size;
-            uniform float alphaMultiplier;
-            uniform int cntInRow;
-            uniform float step;
-            uniform float zSize;
-            uniform float texelSize;
-            uniform vec3 lightPos;
-
-            const float SpecularContribution = 0.0;
-            const float DiffuseContribution = 1.0 - SpecularContribution;
-            
-            //vec3 lightPos = vec3(10., -10., -10.);
-            
-            float zCount;
-
-            vec3 direction;
-            int textureIndex = 0;
-            float partSide;
-
-            float actualIntensity;
-            vec4 actualPoint;
-            vec4 top, bottom, left, right;
-            float xPos, yPos;
-
-            int imgIndex;
-            float colorDiff;
-            float opositeColorDiff;
-
-            float sizeTextelX;
-            float sizeTextelY;
-            
-            vec4 getColor(vec2 pos){
-
-                if(textureIndex == 0)
-                   return texture2D(volume1, pos.xy);
-                if(textureIndex == 1)
-                    return texture2D(volume2, pos.xy);
-                if(textureIndex == 2)
-                    return texture2D(volume3, pos.xy);
-                if(textureIndex == 3)
-                    return texture2D(volume4, pos.xy);
-                
-                return vec4(0.);
-            }
-
-            void mappingFceActual(vec3 position){
-                imgIndex = int(floor(position.z * zCount));
-                
-                int yOffset = imgIndex / cntInRow;
-                int xOffset = imgIndex - (yOffset * cntInRow);
-
-                textureIndex = yOffset/cntInRow;
-                yOffset -= textureIndex*cntInRow;
-
-                xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
-
-                actualPoint = getColor(vec2(xPos, yPos));
-            }
-
-            void mappingFceEviroment(vec3 position){
-                right = getColor(vec2(xPos + sizeTextelX, yPos));
-                left = getColor(vec2(xPos - sizeTextelX, yPos));
-                top = getColor(vec2(xPos, yPos + sizeTextelY));
-                bottom = getColor(vec2(xPos, yPos - sizeTextelY));
-            }
-
-            float getFilteredColor(float color1, float color2){
-                
-                //return color1;
-                return color1*opositeColorDiff + color2*colorDiff;
-            }
-
-            
-            vec3 getActualNormal(){
-                vec3 normal = vec3( getFilteredColor(right.g, right.b) - getFilteredColor(left.g, left.b),
-                                    getFilteredColor(top.g, top.b) - getFilteredColor(bottom.g, bottom.b),
-                                    getFilteredColor(actualPoint.r, actualPoint.g) - getFilteredColor(actualPoint.b, actualPoint.a));
-                return normalize(normal);
-            }
-
-            float getLightIntensity(vec3 actualPos, vec3 normal){
-                //vec3 lightVec = normalize(lightPos - actualPos);
-                //float diffuse = max(dot(lightVec, normal), 0.3);
-
-                vec3 lightVec = normalize(lightPos - actualPos);
-                float diffuse = clamp(dot(lightVec, normal), 0.2, 1.);
-                
-                //Aj odraz  
-                //vec3 viewVec = direction;
-                //vec3 reflectVec = reflect(-lightVec, normal);
-                //float spec = 0.0;
-                //if (diffuse > 0.0){
-                //spec = max(dot(reflectVec, viewVec), 0.2);
-                //spec = pow(spec, 16.0);
-                //}
-                //return SpecularContribution*spec + DiffuseContribution*diffuse;
-            
-                return DiffuseContribution*diffuse;
-            }
-
-            void comupteColorDiff(vec3 actualPos){
-                float zAxis = actualPos.z * zCount;
-                int imgIndex = int(zAxis);
-
-                colorDiff = zAxis - float(imgIndex);
-                opositeColorDiff = 1. - colorDiff;
-            }
-
-            void main()
-            {
-                zCount = float(1) / zSize;
-
-                vec4 value;
-                vec4 result = vec4(0.0);
-
-                vec2 fragCoord = gl_FragCoord.xy/size;
-                vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
-                vec3 backPos = texture2D(backFace, fragCoord).rgb;
-                vec3 path = backPos - frontPos;
-                direction = normalize(path);
-                
-                sizeTextelX = texelSize;
-                sizeTextelY = texelSize;
-                    
-                vec3 actualPos = frontPos;
-
-                partSide = float(1) / float(cntInRow);
-
-                float rayDistance = length(path);
-                float actualDistance = 0.;
-
-                vec3 diff1 = direction * step;
-                float vDiff1 = length(diff1);
-
-                float LightIntensity = 1.0;
-
-                for (int i=0; i < 20000; i++) {
-
-                    if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
-                        break;
-                        
-                    mappingFceActual(actualPos);
-                    comupteColorDiff(actualPos);
-                        
-                    actualIntensity = getFilteredColor(actualPoint.g, actualPoint.b);
-
-                    if(actualIntensity > 0.01){
-                        mappingFceEviroment(actualPos);
-                        LightIntensity = getLightIntensity(actualPos, getActualNormal());
-                        
-                        value = texture2D(transferFce, vec2(actualIntensity, 0.5));
-                        value.rgb = clamp(value.rgb *  LightIntensity + value.rgb * 0.05, 0., 1.);
-
-                        if(value.a < 0.9)
-                            value.a *= alphaMultiplier*125.;
-
-                        result.rgb = (1.0 - result.a) * value.rgb * value.a + result.rgb;
-                        result.a = (1.0 - result.a) * value.a + result.a;
-
-                        if(result.a >= 0.99)
-                        {
-                            result.a = 1.0;
-                            break;
-                        }
-                    }
-
-                    actualPos += diff1;
-                    actualDistance += vDiff1;
-                }
-                gl_FragColor = result;
-            }
-
-        </script>
-
-        <script type="x-shader/x-fragment" id="mipfshader">
-
-            #ifdef GL_ES
-            precision highp float;
-            #endif
-
-            uniform sampler2D frontFace;
-            uniform sampler2D backFace;
-
-            uniform sampler2D volume1;
-            uniform sampler2D volume2;
-            uniform sampler2D volume3;
-            uniform sampler2D volume4;
-
-            uniform vec2 size;
-            uniform float alphaMultiplier;
-            uniform int cntInRow;
-            uniform float step;
-            uniform float zSize;
-            vec3 direction;
-
-            int textureIndex = 0;
-
-            vec2 mappingFce(vec3 position, int sideCnt){
-                float partSide = float(1) / float(sideCnt);
-
-                int imgCount = int(position.z * (float(1) / zSize));
-
-                int yMul = int(imgCount / sideCnt);
-                int xMul = int(imgCount - (yMul*sideCnt));
-
-                textureIndex = yMul/sideCnt;
-                yMul -= textureIndex*sideCnt;
-
-                float xPos = (position.x / float(sideCnt)) + (partSide * float(xMul));
-                float yPos = (position.y / float(sideCnt)) + (partSide * float(yMul));
-
-                return vec2(xPos, yPos);
-            }
-
-            vec4 getColor(vec2 pos){
-
-                if(textureIndex == 0)
-                   return texture2D(volume1, pos.xy);
-                if(textureIndex == 1)
-                    return texture2D(volume2, pos.xy);
-                if(textureIndex == 2)
-                    return texture2D(volume3, pos.xy);
-                if(textureIndex == 3)
-                    return texture2D(volume4, pos.xy);
-                
-                return vec4(0.);
-            }
-
-            vec4 getFilteredColor(vec3 position, float partSide){
-                float zAxis = position.z * (float(1) / zSize);  
-                int imgIndex = int(zAxis);
-                
-                float colorDiff = zAxis - float(imgIndex);
-                float opositeColorDiff = 1. - colorDiff;
-
-                int yOffset = imgIndex / cntInRow;
-                //int xOffset = imgIndex - cntInRow * int(floor( float(imgIndex) / float(cntInRow) )); //modulo
-                int xOffset = int(mod(float(imgIndex), float(cntInRow)));
-
-                textureIndex = yOffset/cntInRow;
-                yOffset -= textureIndex*cntInRow;
-
-                float xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                float yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
-
-                vec4 color1 = getColor(vec2(xPos, yPos));
-
-                float interpoledColor = color1.g*opositeColorDiff + color1.b*colorDiff;
-
-                return vec4(interpoledColor,interpoledColor,interpoledColor,1.);
-            }
-            
-            void main()
-            {
-                float am = alphaMultiplier/0.004;
-
-                vec4 value = vec4(0.0);
-
-                vec2 fragCoord = gl_FragCoord.xy/size;
-                vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
-                vec3 backPos = texture2D(backFace, fragCoord).rgb;
-                vec3 path = backPos - frontPos;
-                direction = normalize(path);
-
-                vec3 actualPos = frontPos;
-
-                float partSide = float(1) / float(cntInRow);
-
-                float rayDistance = length(path);
-                float actualDistance = 0.;
-
-                vec3 diff1 = direction * step;
-                float vDiff1 = length(diff1);
-
-                for (int i=0; i < 2000; i++) {
-
-                    if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
-                        break;
-
-                    vec4 v = getFilteredColor(actualPos.xyz, partSide);
-                        
-                    if(v.g > value.g)
-                    {
-                        value = v;
-                    }
-                        
-                    actualPos += diff1;
-                    actualDistance += vDiff1;
-                }
-
-                gl_FragColor = vec4(value.g, value.g, value.g, 1.);
-            }
-
-        </script>
-
-        <script type="x-shader/x-fragment" id="isofshader">
-
-            #ifdef GL_ES
-            precision highp float;
-            #endif
-
-            uniform sampler2D frontFace;
-            uniform sampler2D backFace;
-
-            uniform sampler2D volume1;
-            uniform sampler2D volume2;
-            uniform sampler2D volume3;
-            uniform sampler2D volume4;
-
-            uniform vec2 size;
-            uniform float alphaMultiplier;
-            uniform int cntInRow;
-            uniform float step;
-            uniform float zSize;
-            uniform int textureSide;
-            uniform float texelSize;
-            
-            uniform float intensityTreshold;
-            uniform vec3 lightPos;
-
-            const float SpecularContribution = 0.0;
-            const float DiffuseContribution = 1.0 - SpecularContribution;
-            //const vec3 lightPos = vec3(10., -10., -10.);
-            
-            float zCount;
-
-            vec3 direction;
-            int textureIndex = 0;
-            float partSide;
-
-            float actualIntensity;
-            vec4 actualPoint;
-            vec4 top, bottom, left, right;
-
-            float xPos, yPos;
-
-            int imgIndex;
-            float colorDiff;
-            float opositeColorDiff;
-
-            float sizeTextelX;
-            float sizeTextelY;
-            
-            vec4 getColor(vec2 pos){
-
-                if(textureIndex == 0)
-                   return texture2D(volume1, pos.xy);
-                if(textureIndex == 1)
-                    return texture2D(volume2, pos.xy);
-                if(textureIndex == 2)
-                    return texture2D(volume3, pos.xy);
-                if(textureIndex == 3)
-                    return texture2D(volume4, pos.xy);
-                
-                return vec4(0.);
-            }
-
-            vec4 mappingFceActual(vec3 position){
-                imgIndex = int(floor(position.z * zCount));
-                
-                int yOffset = imgIndex / cntInRow;
-                int xOffset = imgIndex - (yOffset * cntInRow);
-
-                textureIndex = yOffset/cntInRow;
-                yOffset -= textureIndex*cntInRow;
-
-                xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
-
-                actualPoint = getColor(vec2(xPos, yPos));
-
-                //yOffset = (imgIndex+1) / cntInRow;
-                //xOffset = (imgIndex+1) - (yOffset * cntInRow);
-
-                //int textureIndex2 = yOffset/cntInRow;
-                //yOffset -= textureIndex2*cntInRow;
-
-                //float xPos2 = (position.x / float(cntInRow)) + (partSide * float(xOffset));
-                //float yPos2 = (position.y / float(cntInRow)) + (partSide * float(yOffset));
-
-                //vec2 pos = vec2(xPos2, yPos2);
-
-                //if(textureIndex2 == 0)
-                //    return texture2D(volume1, pos.xy);
-                //if(textureIndex2 == 1)
-                //    return texture2D(volume2, pos.xy);
-                //if(textureIndex2 == 2)
-                //    return texture2D(volume3, pos.xy);
-                //if(textureIndex2 == 3)
-                //    return texture2D(volume4, pos.xy);
-
-                return vec4(0.);
-            }
-
-            void mappingFceEviroment(vec3 position){
-                right = getColor(vec2(xPos + sizeTextelX, yPos));
-                left = getColor(vec2(xPos - sizeTextelX, yPos));
-                top = getColor(vec2(xPos, yPos + sizeTextelY));
-                bottom = getColor(vec2(xPos, yPos - sizeTextelY));
-            }
-
-            float getFilteredColor(float color1, float color2){
-                
-                //return color1;
-                return color1*opositeColorDiff + color2*colorDiff;
-            }
-
-            
-            vec3 getActualNormal(){
-                vec3 normal = vec3( getFilteredColor(right.g, right.b) - getFilteredColor(left.g, left.b),
-                                    getFilteredColor(top.g, top.b) - getFilteredColor(bottom.g, bottom.b),
-                                    getFilteredColor(actualPoint.r, actualPoint.g) - getFilteredColor(actualPoint.b, actualPoint.a));
-                return normalize(normal);
-            }
-
-            float getLightIntensity(vec3 actualPos, vec3 normal){
-                vec3 lightVec = normalize(lightPos - actualPos);
-                float diffuse = clamp(dot(normal, lightVec), 0.2, 1.);
-                //float diffuse = clamp(dot(lightVec, normal), 0.2, 1.);
-                
-                //vec3 lightVec = normalize(lightPos - actualPos);
-                //float diffuse = max(dot(lightVec, normal), 0.3);
-            
-                //Aj odraz  
-                //vec3 viewVec = direction;
-                //vec3 reflectVec = reflect(-lightVec, normal);
-                //float spec = 0.0;
-                //if (diffuse > 0.0){
-                //spec = max(dot(reflectVec, viewVec), 0.2);
-                //spec = pow(spec, 16.0);
-                //}
-                //return SpecularContribution*spec + DiffuseContribution*diffuse;
-            
-                return DiffuseContribution*diffuse;
-            }
-
-            void comupteColorDiff(vec3 actualPos){
-                float zAxis = actualPos.z / zSize;
-
-                colorDiff = zAxis - floor(zAxis);
-                //colorDiff = 1.;
-                opositeColorDiff = 1. - colorDiff;
-            }
-
-            void main()
-            {
-                zCount = float(1) / zSize;
-                partSide = float(1) / float(cntInRow);
-                
-                vec4 value = vec4(0.0);
-                float Idiff = 0.;
-
-                vec2 fragCoord = gl_FragCoord.xy/size;
-                vec3 frontPos = texture2D(frontFace, fragCoord).rgb;
-                vec3 backPos = texture2D(backFace, fragCoord).rgb;
-                vec3 path = backPos - frontPos;
-                direction = normalize(path);
-
-                vec3 isoColor = vec3(0.004*245., 0.004*228., 0.004*203.);
-
-                vec3 actualPos = frontPos;
-                
-                sizeTextelX = texelSize;
-                sizeTextelY = texelSize;
-
-                float rayDistance = length(path);
-                float actualDistance = 0.;
-
-                vec3 diff1 = direction * step;
-                float vDiff1 = length(diff1);
-
-                float LightIntensity = 1.0;
-
-                for (int i=0; i < 2000; i++) {
-
-                    if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
-                        break;
-
-                    vec4 nextPoint = mappingFceActual(actualPos);
-                    comupteColorDiff(actualPos);
-
-                    actualIntensity = getFilteredColor(actualPoint.y, actualPoint.z);
-
-                    if(actualIntensity > intensityTreshold)
-                    {
-                        //value.rgb = isoColor * actualIntensity;
-                        //shading
-                        mappingFceEviroment(actualPos);
-                        Idiff = getLightIntensity(actualPos, getActualNormal());
-                            
-                        
-                        //value.rgb = isoColor;
-                        value.rgb = clamp(isoColor * Idiff + isoColor * 0.05, 0., 1.);
-                        value.a = 1.;
-
-                        break;
-                    }
-                        
-                    actualPos += diff1;
-                    actualDistance += vDiff1;
-                }
-                gl_FragColor = value;
-            }
-
-        </script>
+        <!-- Shaders end -->
 
         <script>
             function SetupRenderEvents(canvas) {
@@ -859,8 +233,9 @@
         <script>
             //KONSTANTA, pocet obrazkov ktore bude dokreslovat
             var postFrameCount = 1;
+            //KONSTANTA, velkost bounding boxu
             var c_boxSize = 1.;
-            //cislo akutalneho obrazku dokreslenia
+            //counter akutalneho obrazku dokreslenia
             var actualPostFrame = 0;
 
             var isRunning = false;
@@ -883,9 +258,6 @@
             var sizeOfTexture = 4096;
             var sizeOfImage = 256;
             var rayCastStep = 0.0015;
-            //var sizeOfTexture = 8192;
-            //var sizeOfImage = 512;
-            //var rayCastStep = 0.0005;
             alphaMul = 0.004;
             alphaMulOneP = 0.00008;
             var sizeInZ = 0.007;
@@ -899,7 +271,6 @@
             document.getElementById("QualitySelect").selectedIndex = 1;
 
             init();
-            animate();
 
             function startLoop(state) {
 
@@ -913,9 +284,12 @@
             }
 
             function init() {
+
                 for (i = 0; i < 3; i++) {
                     dataImages[i] = new Array(512);
                 }
+                //Shader files loading
+                LoadShaders();
 
                 // Create the scene and set the scene size.
                 scene = new THREE.Scene();
@@ -967,7 +341,7 @@
                 //LUT image
                 loader = new THREE.TextureLoader()
                 lutTexture = loader.load("lut/myLut4.png");
-                
+
                 //Load dataset
                 hlavaTexture = preprocessData("volumes/HEAD/",  83, 0);
                 oblickyTexture = preprocessData("volumes/SET1/",  361, 1);
@@ -980,9 +354,9 @@
                 //Create cube
                 frontCube = baseFrontCube(jsCubeGeometry(0, 0, 1, c_boxSize));
                 backCube = baseBackCube(jsCubeGeometry(0, 0, 1, c_boxSize));
-                frontScene.add(frontCube);
-                backScene.add(jsBlackCube(0, 0, 1, c_boxSize));
-                backScene.add(backCube);
+
+                //frontScene.add(frontCube);
+                //backScene.add(backCube);
                 //scene.add(jsBlackCube(0, 0, 1, c_boxSize));
 
                 frontTexture = new THREE.WebGLRenderTarget(WIDTH, HEIGHT, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearMipMapNearestFilter, format: THREE.RGBFormat, type: THREE.HalfFloatType });
@@ -993,12 +367,22 @@
                 setCuttingPlaneLines(cubeGeom);
                 volumeCube = rayCube(cubeGeom);
 
-                //scene.add(frontCube);
                 scene.add(volumeCube);
+            }
 
-                //var planeGeometry = cuttingPlane.cutBox();
-                //planeObject = baseFrontCube(planeGeometry);
-                //scene.add(planeObject);
+            function refreshEmtySpaceSkipping(datasetIndex) {
+                //zmazanie objektov
+                clearScene(frontScene);
+                clearScene(backScene);
+
+                addFrontCubes(datasetIndex);
+            }
+
+            function clearScene(scene) {
+                for (var i = scene.children.length - 1; i >= 0; i--) {
+                    if (scene.children[i] instanceof THREE.Mesh)
+                        scene.remove(scene.children[i]);
+                }
             }
 
             function addFrontCubes(datasetIndex) {
@@ -1011,15 +395,15 @@
                             if (undersampledData[datasetIndex][it + 1] > 0) {
                                 frontScene.add(baseFrontCube(jsCubeGeometry(x, y, z, cubeSize)));
                                 backScene.add(baseBackCube(jsCubeGeometry(x, y, z, cubeSize)));
-                                //scene.add(baseBackCube(jsCubeGeometry(x, y, z, cubeSize)));
+                                //scene.add(baseFrontCube(jsCubeGeometry(x, y, z, cubeSize)));
                             }
                             it += 2;
                         }
                     }
                 }
 
-                frontScene.remove(frontCube);
-                backScene.remove(backCube);
+                //frontScene.remove(frontCube);
+                //backScene.remove(backCube);
             }
 
             function SetCubeOrder(cameraPosition) {
@@ -1125,7 +509,6 @@
                 return cubeGeometry;
             }
 
-            //http://stackoverflow.com/questions/10330342/threejs-assign-different-colors-to-each-vertex-in-a-geometry
             //Tvorba kocky pomocou Box geometry
             function jsBlackCube(x, y, z, size) {
                 //load geometry
@@ -1138,7 +521,7 @@
                     color: 0x000000,
                     depthFunc: THREE.LessDepth
                 });
-                
+
                 return new THREE.Mesh(cubeGeometry, cubeMaterial);
             }
 
@@ -1216,8 +599,8 @@
                 new THREE.ShaderMaterial({
                     side: THREE.DoubleSide,
                     uniforms: baseUniforms,
-                    vertexShader: document.getElementById('vertexshader').innerHTML,
-                    fragmentShader: document.getElementById('xrayfshader').innerHTML
+                    vertexShader: document.getElementById('vertex_shader').innerHTML,
+                    fragmentShader: document.getElementById('xray_fshader').innerHTML
                 });
 
                 return shaderMaterial;
@@ -1245,8 +628,8 @@
                 new THREE.ShaderMaterial({
                     side: THREE.DoubleSide,
                     uniforms: uniforms,
-                    vertexShader: document.getElementById('vertexshader').innerHTML,
-                    fragmentShader: document.getElementById('lutfshader').innerHTML
+                    vertexShader: document.getElementById('vertex_shader').innerHTML,
+                    fragmentShader: document.getElementById('lut_fshader').innerHTML
                 });
 
                 return shaderMaterial;
@@ -1270,8 +653,8 @@
                 new THREE.ShaderMaterial({
                     side: THREE.DoubleSide,
                     uniforms: baseUniforms,
-                    vertexShader: document.getElementById('vertexshader').innerHTML,
-                    fragmentShader: document.getElementById('mipfshader').innerHTML
+                    vertexShader: document.getElementById('vertex_shader').innerHTML,
+                    fragmentShader: document.getElementById('mip_fshader').innerHTML
                 });
 
                 return shaderMaterial;
@@ -1294,21 +677,17 @@
                     texelSize: { type: "f", value: 1. / sizeOfTexture },
                     intensityTreshold: { type: "f", value: intensityT },
                     lightPos: { type: "v3", value: camera.position.clone().negate() }
-                }; 
+                };
 
                 var shaderMaterial =
                 new THREE.ShaderMaterial({
                     side: THREE.DoubleSide,
                     uniforms: baseUniforms,
-                    vertexShader: document.getElementById('vertexshader').innerHTML,
-                    fragmentShader: document.getElementById('isofshader').innerHTML
+                    vertexShader: document.getElementById('vertex_shader').innerHTML,
+                    fragmentShader: document.getElementById('iso_fshader').innerHTML
                 });
 
                 return shaderMaterial;
-            }
-
-            function recalculateSceneReverseOrder(scene) {
-
             }
 
             function animate() {
@@ -1325,6 +704,8 @@
             }
 
             function animateCore() {
+                controls.update();
+
                 //Vypocet cutting plane
                 var planeGeometry = cuttingPlane.cutBox();
                 var newPlaneObject = baseFrontCube(planeGeometry);
@@ -1334,7 +715,7 @@
                 if (planeObject != undefined) {
                     frontScene.remove(planeObject);
                     //scene.remove(planeObject);
-                    scene.remove(rayPlaneObject);
+                    //scene.remove(rayPlaneObject);
                 }
                 planeObject = newPlaneObject;
                 rayPlaneObject = newRayPlaneObject;
@@ -1342,24 +723,19 @@
                 if (planeObject != undefined) {
                     frontScene.add(planeObject);
                     //scene.add(planeObject);
-                    scene.add(rayPlaneObject);
+                    //scene.add(rayPlaneObject);
                 }
-
-
-                controls.update();
-
-                //setShader();
 
                 // Render front cube.
                 renderer.render(frontScene, camera, frontTexture, true);
-                //frontTexture.texture.anisotropy = renderer.getMaxAnisotropy();
-                // Render back cube.
 
-                //prepocitanie vykreslovania od vzdialenych kociek
-                //SetCubeOrder(camera.position);
+                //nastavenie depth bufferu na hodnotu 0
+                gl.clearDepth(0.0);
+                renderer.clearDepth();
+
+                // Render back cube.
                 renderer.render(backScene, camera, backTexture, true);
-                //backTexture.texture.anisotropy = renderer.getMaxAnisotropy();
-                //renderer.clear(true, true, true);
+                gl.clearDepth(1.0);
 
                 setShader();
 

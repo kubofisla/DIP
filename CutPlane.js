@@ -96,7 +96,7 @@
             var normal = OrbitControl.target.clone();
             normal.sub(viewportPosition);
             var normalized = normal.clone().normalize();
-            viewportPosition.add(normalized.multiplyScalar(camera.near+0.001))
+            viewportPosition.add(normalized.multiplyScalar(camera.near+0.0001))
 
             //vzdialenost k pociatku sur. sustavy
             var cPos = viewportPosition.clone();
