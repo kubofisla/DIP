@@ -5,6 +5,10 @@ uniform sampler2D volume1;
 uniform sampler2D volume2;
 uniform sampler2D volume3;
 uniform sampler2D volume4;
+uniform sampler2D volume5;
+uniform sampler2D volume6;
+uniform sampler2D volume7;
+uniform sampler2D volume8;
 
 uniform vec2 size;
 uniform float alphaMultiplier;
@@ -42,6 +46,14 @@ vec4 getColor(vec2 pos){
         return texture2D(volume3, pos.xy);
     if(textureIndex == 3)
         return texture2D(volume4, pos.xy);
+    if(textureIndex == 4)
+        return texture2D(volume5, pos.xy);
+    if(textureIndex == 5)
+        return texture2D(volume6, pos.xy);
+    if(textureIndex == 6)
+        return texture2D(volume7, pos.xy);
+    if(textureIndex == 7)
+        return texture2D(volume8, pos.xy);
 
     return vec4(0.);
 }
@@ -97,7 +109,7 @@ void main()
     vec3 diff1 = direction * step;
     float vDiff1 = length(diff1);
 
-    for (int i=0; i < 2000; i++) {
+    for (int i=0; i < 25000; i++) {
 
         if(actualDistance > rayDistance || actualPos.x > 1.0 || actualPos.x < 0.0 || actualPos.y > 1.0 || actualPos.y < 0.0 || actualPos.z > 1.0 || actualPos.z < 0.0 )
             break;

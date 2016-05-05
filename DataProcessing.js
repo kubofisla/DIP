@@ -1,7 +1,6 @@
 // JavaScript source code
-var maxTextures = 4;
+var maxTextures = 8;
 const maxImageValue = 255;
-//var examplesCount = 3;
 var undersampledSize = 512;
 var imageSize;
 
@@ -41,13 +40,13 @@ function preprocessData(pathDir, count, dataSetIndex) {
     }
 
     //nacita obrazky upravi ich a vytori z nich textury
-    if (isAllLoaded())
+    if (isAllLoaded(dataSetIndex))
     {
         imageCounter = 0;
         names = getFileNames(pathDir, count);
         mergeData(names, 0, maxSide - side, texNum, dataSetIndex);
         undersampledData[dataSetIndex] = UndersampleDataset(dataSetIndex, sizeInZ, 1.);
-        addFrontCubes(dataSetIndex);
+        addUndersampledCubes(dataSetIndex);
     }
     else
         loadPostprocessImages();
@@ -70,11 +69,11 @@ function preprocessData(pathDir, count, dataSetIndex) {
             undersampledData[dataSetIndex] = UndersampleDataset(dataSetIndex, sizeInZ, 1.);
 
             //Zistenie aktualneho nastaveneho datasetu
-            var e = document.getElementById("DateSetSelect");
-            var type = e.options[e.selectedIndex].value;
+            //var e = document.getElementById("DateSetSelect");
+            //var type = e.options[e.selectedIndex].value;
             //todo spravit event?
-            if (type == dataSetIndex)
-                addFrontCubes(dataSetIndex);
+            //if (type == dataSetIndex)
+            addUndersampledCubes(dataSetIndex);
         }
         else
         {                          
@@ -144,7 +143,10 @@ function preprocessData(pathDir, count, dataSetIndex) {
 
     }
 
-    function isAllLoaded() {
+    function isAllLoaded(actualDataset) {
+        if (isLoaded[actualDataset])
+            return true;
+
         for (var i = 0; i < 3; i++) {
             if (isLoaded[i] == false)
                 return false;
@@ -170,7 +172,7 @@ function preprocessData(pathDir, count, dataSetIndex) {
 
             isLoaded[dataSetIndex] = true;
             animate();
-            if (isAllLoaded()) {
+            if (isAllLoaded(dataSetIndex)) {
                 document.getElementById("QualitySelect").disabled = false;
             }
         }
