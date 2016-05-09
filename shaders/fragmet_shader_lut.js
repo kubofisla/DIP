@@ -32,7 +32,7 @@ float partSide;
 
 float actualIntensity;
 vec4 actualPoint;
-vec4 top, bottom, left, right;
+vec4 top, bottom, left, right, front;
 float xPos, yPos;
 
 int imgIndex;
@@ -86,20 +86,51 @@ void mappingFceEviroment(vec3 position){
     left = getColor(vec2(xPos - sizeTextelX, yPos));
     top = getColor(vec2(xPos, yPos + sizeTextelY));
     bottom = getColor(vec2(xPos, yPos - sizeTextelY));
+
+    int yOffset = (imgIndex+1) / cntInRow;
+    int xOffset = imgIndex+1 - (yOffset * cntInRow);
+
+    textureIndex = yOffset/cntInRow;
+    yOffset -= textureIndex*cntInRow;
+
+    xPos = (position.x / float(cntInRow)) + (partSide * float(xOffset));
+    yPos = (position.y / float(cntInRow)) + (partSide * float(yOffset));
+    front = getColor(vec2(xPos, yPos));
 }
 
 float getFilteredColor(float color1, float color2){
     return color1*opositeColorDiff + color2*colorDiff;
 }
 
+vec3 getActualNormal(vec3 actualPos){
+    vec3 normalCamera = normalize(lightPos) - vec3(0.5, 0.5, 0.5);
+    float x0 = 1.;
+    float x1 = 1.;
+    float y0 = 1.;
+    float y1 = 1.;
+    float z0 = 1.;
+    float z1 = 1.;
 
-vec3 getActualNormal(){
     if(counter < 1)
-        actualPoint.r = 0.;
+    {
+        if(normalCamera.x < 0.)
+            x0 = 1. - (normalCamera.x * -1.);
+        if(normalCamera.x > 0.)
+            x1 = 1. - (normalCamera.x);
+        if(normalCamera.y < 0.)
+            y0 = 1. - (normalCamera.y * -1.);
+        if(normalCamera.y > 0.)
+            y1 = 1. - (normalCamera.y);
+        if(normalCamera.z < 0.)
+            z0 = 1. - (normalCamera.z * -1.);
+        if(normalCamera.z > 0.)
+            z1 = 1. - (normalCamera.z);
+    }
 
-    vec3 normal = vec3( getFilteredColor(left.g, left.b) - getFilteredColor(right.g, right.b),
-                        getFilteredColor(bottom.g, bottom.b) - getFilteredColor(top.g, top.b),
-                        getFilteredColor(actualPoint.r, actualPoint.g) - getFilteredColor(actualPoint.b, actualPoint.a));
+    vec3 normal = vec3( x0 * getFilteredColor(left.g, left.b) - x1 * getFilteredColor(right.g, right.b),
+                        y0 * getFilteredColor(bottom.g, bottom.b) - y1 * getFilteredColor(top.g, top.b),
+                        z0 * getFilteredColor(actualPoint.r, actualPoint.g) - z1 * getFilteredColor(front.g, front.b));
+    gl_FragColor = vec4(normalize(normal), 1.);
     return normalize(normal);
 }
 
@@ -112,8 +143,8 @@ float getLightIntensity(vec3 actualPos, vec3 normal){
     vec3 reflectVec = reflect(-lightVec, normal);
     float spec = 0.0;
     if (diffuse > 0.0){
-    spec = max(dot(reflectVec, viewVec), 0.2);
-    spec = pow(spec, 16.0);
+        spec = max(dot(reflectVec, viewVec), 0.2);
+        spec = pow(spec, 16.0);
     }
     return SpecularContribution*spec + DiffuseContribution*diffuse;
 
@@ -175,10 +206,11 @@ void main()
 
         if(actualIntensity > 0.01){
             mappingFceEviroment(actualPos);
-            LightIntensity = getLightIntensity(actualPos, getActualNormal());
+            LightIntensity = getLightIntensity(actualPos, getActualNormal(actualPos));
 
             value = texture2D(transferFce, vec2(actualIntensity, 0.5));
             value.rgb = clamp(value.rgb *  LightIntensity + value.rgb * 0.05, 0., 1.);
+            //value.rgb = value.rgb *  clamp(LightIntensity, 0., 1.)  + value.rgb * 0.05;
 
             if(value.a < 0.9)
                 value.a *= alphaMultiplier*125.;

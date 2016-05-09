@@ -1,6 +1,8 @@
 
 ( function () {
     CutPlane = function (camera, orbitControl) {
+        this.Normal = new THREE.Vector3();
+
         var Camera = camera;
         var OrbitControl = orbitControl;
         var Lines = [];
@@ -97,6 +99,7 @@
             normal.sub(viewportPosition);
             var normalized = normal.clone().normalize();
             viewportPosition.add(normalized.multiplyScalar(camera.near+0.0001))
+            Normal = normal;
 
             //vzdialenost k pociatku sur. sustavy
             var cPos = viewportPosition.clone();

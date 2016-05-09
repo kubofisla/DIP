@@ -132,10 +132,11 @@ function preprocessData(pathDir, count, dataSetIndex) {
                 else
                     workingImageData[1].data[i + 2] = workingImageData[2].data[i + 1];      //blue
 
-                if (!workingImageData[3])
-                    workingImageData[1].data[i + 3] = 0;
-                else
-                    workingImageData[1].data[i + 3] = workingImageData[3].data[i + 1];      //alpha
+                //if (!workingImageData[3])
+                //    workingImageData[1].data[i + 3] = 255;
+                //else
+                //    workingImageData[1].data[i + 3] = 255;      //alpha
+                //workingImageData[1].data[i + 3] = workingImageData[3].data[i + 1];      //alpha
             }
 
             dataImages[dataSetIndex][ix].getContext("2d").putImageData(workingImageData[1], 0, 0);
