@@ -41,12 +41,12 @@
             <div class="settingsItem" id="IsoTresholdSetting">
                 <label id="TrasholdLabel">Iso-surface density trashold </label>
                 <label id="TrasholdValue"></label>
-                <input class="inputSettings" type="range" id="trasholdSliderBar" min="0" max="100" step="1" value="5" onChange="trasholdChange(this.value); makeAnimate()" onInput="trasholdChangeMove(this.value); makeAnimate()" />
+                <input class="inputSettings" type="range" id="trasholdSliderBar" min="0" max="100" step="1" value="95" onChange="trasholdChange(this.value); makeAnimate()" onInput="trasholdChangeMove(this.value); makeAnimate()" />
             </div>
             <div class="settingsItem" id="CutPlaneSetting">
                 <label id="CutPlaneLabel">Cut plane distance </label>
                 <label id="CutPlaneValue"></label>
-                <input class="inputSettings" type="range" id="cutPlaneSliderBar" min="0" max="200" step="0.1" value="10" onChange="cutPlaneDistanceChange(this.value); makeAnimate()" onInput="cutPlaneDistanceChangeMove(this.value); makeAnimate()" />
+                <input class="inputSettings" type="range" id="cutPlaneSliderBar" min="0" max="500" step="0.1" value="10" onChange="cutPlaneDistanceChange(this.value); makeAnimate()" onInput="cutPlaneDistanceChangeMove(this.value); makeAnimate()" />
             </div>
 
             <div class="settingsItem">
@@ -61,7 +61,7 @@
             <div class="settingsItem">
                 <label id="RaycastStepLabel">Raycast step</label>
                 <label id="RaycastStepValue"></label>
-                <input class="inputSettings" type="range" id="raycastStepSliderBar" min="1" max="8" step="" value="5" onChange="raycastStepChange(this.value); makeAnimate()" onInput="    raycastStepChange(this.value); makeAnimate()" />
+                <input class="inputSettings" type="range" id="raycastStepSliderBar" min="1" max="8" step="" value="3" onChange="raycastStepChange(this.value); makeAnimate()" onInput="    raycastStepChange(this.value); makeAnimate()" />
             </div>
 
             <div class="settingsItem">
@@ -71,7 +71,7 @@
             <div class="settingsItem">
                 <label id="RaycastSpeedupStepLabel">Speed up step</label>
                 <label id="RaycastSpeedupStepValue"></label>
-                <input class="inputSettings" type="range" id="RaycastSpeedupStepSliderBar" min="1" max="8" step="" value="5" onChange="speedupOnMoveChange(this.value);" onInput="    speedupOnMoveChange(this.value);" />
+                <input class="inputSettings" type="range" id="RaycastSpeedupStepSliderBar" min="1" max="8" step="" value="6" onChange="speedupOnMoveChange(this.value);" onInput="    speedupOnMoveChange(this.value);" />
             </div>
             <!--<label class="settingsItem"><input type='checkbox' onclick='setBackground(this);' onInput='setBackground(this);'>Debug background</label>-->
 
@@ -410,7 +410,7 @@
             //velkost jedneho dielu(kroku) priehladnosti
             var alphaMulOneP = rayCastStep / opacityRaycastMultiple;
             //trashold intenzity pri iso surface
-            var intensityT = 0.05;
+            var intensityT = 0.95;
 
             //velkost voxelu v z osi
             var sizeInZ = 0.007;
@@ -475,7 +475,7 @@
                 }
                 else if(index == 2){
                     sizeInZ = 0.002;
-                    volumeTexture = preprocessData("volumes/SET1/", 300, 1);
+                    volumeTexture = preprocessData("volumes/SET1/", 361, 1);
                 }
                 else if(index == 3){
                     sizeInZ = 0.0028;
@@ -818,6 +818,7 @@
                     zSize: { type: "f", value: sizeInZ },
                     texelSize: { type: "f", value: 1. / sizeOfTexture },
                     lightPos: { type: "v3", value: lightPosition }
+                    //intensityTreshold: { type: "f", value: intensityT }
                 };
 
                 var shaderMaterial =
@@ -916,9 +917,8 @@
 
                 //Vypocet cutting plane
                 var planeGeometry = cuttingPlane.cutBox();
-                var newPlaneObject = baseFrontCube(planeGeometry);
+                var planeObject = baseFrontCube(planeGeometry);
 
-                planeObject = newPlaneObject;
                 //pridanie noveho cutting plane
                 if (planeObject != undefined) {
                     frontScene.add(planeObject);

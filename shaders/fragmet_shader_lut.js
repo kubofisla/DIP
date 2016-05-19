@@ -111,20 +111,28 @@ vec3 getActualNormal(vec3 actualPos){
     float z0 = 1.;
     float z1 = 1.;
 
-    if(counter < 1)
+    if(counter < 1 && actualPos.x < 1.0 && actualPos.x > 0.0 && actualPos.y < 1.0 && actualPos.y > 0.0 && actualPos.z > 0.0 )
     {
-        if(normalCamera.x < 0.)
-            x0 = 1. - (normalCamera.x * -1.);
-        if(normalCamera.x > 0.)
-            x1 = 1. - (normalCamera.x);
-        if(normalCamera.y < 0.)
-            y0 = 1. - (normalCamera.y * -1.);
-        if(normalCamera.y > 0.)
-            y1 = 1. - (normalCamera.y);
-        if(normalCamera.z < 0.)
-            z0 = 1. - (normalCamera.z * -1.);
-        if(normalCamera.z > 0.)
-            z1 = 1. - (normalCamera.z);
+        float pom = zCount - float(imgIndex);
+        if(pom < 1.)
+            front.b = 0.;
+        else if(pom < 2.)
+            front.g = 0.;
+        else
+        {
+            if(normalCamera.x < 0.)
+                x0 = 1. - (normalCamera.x * -1.);
+            if(normalCamera.x > 0.)
+                x1 = 1. - (normalCamera.x);
+            if(normalCamera.y < 0.)
+                y0 = 1. - (normalCamera.y * -1.);
+            if(normalCamera.y > 0.)
+                y1 = 1. - (normalCamera.y);
+            if(normalCamera.z < 0.)
+                z0 = 1. - (normalCamera.z * -1.);
+            if(normalCamera.z > 0.)
+                z1 = 1. - (normalCamera.z);
+        }
     }
 
     vec3 normal = vec3( x0 * getFilteredColor(left.g, left.b) - x1 * getFilteredColor(right.g, right.b),
